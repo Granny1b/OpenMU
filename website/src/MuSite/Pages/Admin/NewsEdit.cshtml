@@ -1,0 +1,59 @@
+@page "/admin/news/{id}"
+@model MuSite.Pages.Admin.NewsEditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New announcement" : "Edit announcement";
+}
+
+<h1>@(Model.IsNew ? "New announcement" : "Edit announcement")</h1>
+
+@if (Model.Error is { } error)
+{
+    <div class="mu-notice mu-notice--danger">@error</div>
+}
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__body">
+            <form method="post">
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_Title">Title</label>
+                    <input class="mu-input" id="Input_Title" name="Input.Title" maxlength="120"
+                           value="@Model.Input.Title" required autofocus />
+                </div>
+
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_Body">Body</label>
+                    <textarea class="mu-input" id="Input_Body" name="Input.Body" rows="14" required>@Model.Input.Body</textarea>
+                    <p class="mu-hint">Markdown. Raw HTML is escaped, and links are limited to http,
+                       https and mailto.</p>
+                </div>
+
+                <div class="mu-field">
+                    <label class="mu-label"><input type="checkbox" name="Input.Publish" value="true" checked="@Model.Input.Publish" /> Published</label>
+                    <label class="mu-label"><input type="checkbox" name="Input.Pin" value="true" checked="@Model.Input.Pin" /> Pinned to the top</label>
+                </div>
+
+                <button class="mu-btn mu-btn--primary" type="submit">Save</button>
+                <a class="mu-btn" href="/admin/news">Cancel</a>
+            </form>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Preview</h2></div>
+        <div class="mu-panel__body">
+            @if (string.IsNullOrWhiteSpace(Model.Preview))
+            {
+                <div class="mu-empty">
+                    <div class="mu-empty__title">Nothing to preview</div>
+                    Save to see how it renders.
+                </div>
+            }
+            else
+            {
+                @* Already through Markdig (DisableHtml) and HtmlSanitizer. *@
+                @Html.Raw(Model.Preview)
+            }
+        </div>
+    </div>
+</div>

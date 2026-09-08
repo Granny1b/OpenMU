@@ -8,6 +8,7 @@ services:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - openmu-startup
+      - mu-site
 
   openmu-startup:
     image: munique/openmu
@@ -39,6 +40,58 @@ services:
     depends_on:
       - database
 
+  # The public website. No published host port - nginx reaches it by container name.
+  mu-site:
+    image: mu-site
+    container_name: mu-site
+    build:
+      context: ../../website
+      dockerfile: Dockerfile
+    environment:
+      # Five separate roles, so no single code path can read every password hash.
+      # See website/db/01b-grants.sql and website/.env.example.
+      ConnectionStrings__GameRead: "Host=database;Database=openmu;Username=mu_web_read;Password=${MUSITE_DB_READ_PW:-}"
+      ConnectionStrings__GameAuth: "Host=database;Database=openmu;Username=mu_web_auth;Password=${MUSITE_DB_AUTH_PW:-}"
+      ConnectionStrings__GameReg:  "Host=database;Database=openmu;Username=mu_web_reg;Password=${MUSITE_DB_REG_PW:-}"
+      ConnectionStrings__Site:     "Host=database;Database=openmu_web;Username=mu_web_app;Password=${MUSITE_DB_APP_PW:-}"
+      MUSITE_SERVERNAME: ${MUSITE_SERVERNAME:-OpenMU Server}
+      # BOTH conditions gate /admin: the account's State must be GameMaster, AND its login name must
+      # appear here. Empty means zero admins and /admin returns 404 - that is deliberate.
+      MUSITE_ADMINS__0: ${MUSITE_ADMIN_1:-}
+      MUSITE_ADMINS__1: ${MUSITE_ADMIN_2:-}
+      MUSITE_OWNER: ${MUSITE_OWNER:-}
+      # 20 for Season 6, 10 for 0.75/0.95d. Lowering it later strands every account registered in
+      # between: a longer password is truncated by the client, so its hash can never verify again.
+      MUSITE_MAXPASSWORD: ${MUSITE_MAXPASSWORD:-20}
+      MUSITE_CONNECTHOST: ${MUSITE_CONNECTHOST:-}
+      MUSITE_CLIENTURL: ${MUSITE_CLIENTURL:-}
+      MUSITE_DISCORDURL: ${MUSITE_DISCORDURL:-}
+      # The connect server is reached by container name; the published host ports differ per deploy
+      # variant, and probing those would report "offline" on the wrong one.
+      MUSITE_PROBEENDPOINTS__0: "openmu-startup:44405"
+      # The docker bridge network, so X-Forwarded-For from nginx is honoured.
+      MUSITE_TRUSTEDNETWORKS__0: ${MUSITE_TRUSTEDNETWORKS:-172.16.0.0/12}
+    volumes:
+      - site-keys:/app/keys
+    depends_on:
+      - database
+
+  # One-shot: creates the openmu_web schema. The ONLY place mu_web_own credentials appear - the
+  # running site connects as mu_web_app, which does not own that database, and that non-ownership
+  # is what makes audit_log genuinely append-only.
+  #   docker compose run --rm mu-site-migrate
+  mu-site-migrate:
+    image: mu-site-migrate
+    container_name: mu-site-migrate
+    build:
+      context: ../../website
+      dockerfile: Dockerfile.migrate
+    profiles: ["tools"]
+    environment:
+      MUSITE_MIGRATE_CONNSTR: "postgresql://mu_web_own:${MUSITE_DB_OWN_PW:-}@database:5432/openmu_web"
+    depends_on:
+      - database
+
   database:
     image: postgres
     container_name: database
@@ -46,11 +99,17 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: openmu
       POSTGRES_USER: postgres
-    ports:
-      - "5432"
+    # Deliberately NOT published. `ports: - "5432"` binds a random host port on 0.0.0.0, which
+    # exposed PostgreSQL - with POSTGRES_PASSWORD: admin - to anything that could reach the machine.
+    # Every container that needs it reaches it by name on the compose network.
+    # docker-compose.override.yml still publishes 5433 for local development; that override is not
+    # used by the production command.
     volumes:
       - dbdata:/var/lib/postgresql #store data on volume
 
 volumes:
   adminpanel-keys:
   dbdata:
+  # The website's data protection key ring - it signs the auth cookie, so anything able to read it
+  # can forge a session for any account. The image creates the directory as 0700.
+  site-keys:

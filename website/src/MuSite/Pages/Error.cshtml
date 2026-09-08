@@ -1,0 +1,17 @@
+@page "/error"
+@model ErrorModel
+@{
+    ViewData["Title"] = "Something went wrong";
+}
+
+<div class="mu-panel">
+    <div class="mu-panel__head"><h2 class="mu-panel__title">Something went wrong</h2></div>
+    <div class="mu-panel__body">
+        <p>That page could not be shown. Nothing you did caused it and nothing was lost.</p>
+        @if (Model.RequestId is { } id)
+        {
+            <p class="mu-hint">If you report this, quote <span class="mu-mono">@id</span>.</p>
+        }
+        <a class="mu-btn" href="/">Back to the front page</a>
+    </div>
+</div>

@@ -1,0 +1,90 @@
+@page "/rankings/{board?}"
+@model RankingsModel
+@using MuSite.Data
+@{
+    ViewData["Title"] = $"{Model.BoardTitle} rankings";
+}
+
+<h1>Rankings</h1>
+
+<div class="mu-panel">
+    <div class="mu-panel__head">
+        <h2 class="mu-panel__title">@Model.BoardTitle</h2>
+        <span class="mu-panel__aside">@Model.Total.ToString("N0") ranked &middot; updated @Model.Age</span>
+    </div>
+    <div class="mu-panel__body">
+        <nav class="mu-pager" style="justify-content:flex-start">
+            @foreach (var (board, title) in RankingsModel.Boards)
+            {
+                <a class="mu-btn mu-btn--sm" href="@Model.BoardLink(board)">@title</a>
+            }
+        </nav>
+
+        <form method="get" class="mu-field" style="max-width:280px">
+            <label class="mu-label" for="q">Find a character</label>
+            <input class="mu-input" id="q" name="q" type="search" value="@Model.Search" placeholder="name" />
+        </form>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">Nothing to rank yet</div>
+                @if (string.IsNullOrWhiteSpace(Model.Search))
+                {
+                    <text>Characters appear here once they have been played and saved.</text>
+                }
+                else
+                {
+                    <text>No character starts with &ldquo;@Model.Search&rdquo;.</text>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead>
+                        <tr>
+                            <th>#</th><th>Character</th><th>Class</th>
+                            <th class="mu-table__num">Level</th>
+                            <th class="mu-table__num">Master</th>
+                            <th class="mu-table__num">Resets</th>
+                            <th class="mu-table__num">PK</th>
+                            <th>Guild</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @{ var rank = Model.Offset; }
+                    @foreach (var row in Model.Rows)
+                    {
+                        rank++;
+                        <tr>
+                            <td class="mu-rank @(rank <= 3 ? $"mu-rank--{rank}" : null)">@rank</td>
+                            <td><a href="/character/@Uri.EscapeDataString(row.Name)">@row.Name</a></td>
+                            <td>@(row.Class ?? "—")</td>
+                            <td class="mu-table__num">@row.Level</td>
+                            <td class="mu-table__num">@(row.MasterLevel > 0 ? row.MasterLevel.ToString() : "—")</td>
+                            <td class="mu-table__num">@row.Resets</td>
+                            <td class="mu-table__num">@row.Pk</td>
+                            <td>@if (row.Guild is { } guild) { <a href="/guild/@Uri.EscapeDataString(guild)">@guild</a> } else { <text>—</text> }</td>
+                            <td>@Html.Raw(RankingsModel.BadgeFor(row))</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mu-pager">
+                @if (Model.PageNumber > 1)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber - 1)">&lsaquo; Previous</a>
+                }
+                <span class="mu-muted">Page @Model.PageNumber of @Model.PageCount</span>
+                @if (Model.PageNumber < Model.PageCount)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber + 1)">Next &rsaquo;</a>
+                }
+            </div>
+        }
+    </div>
+</div>

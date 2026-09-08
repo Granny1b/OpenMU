@@ -11,6 +11,8 @@ The deployment guides moved to the documentation website:
   [all-in-one-traefik](all-in-one-traefik)
 * [Distributed](../docs-website/docs/deployment/distributed.md) — currently
   broken and unsupported; the compose files are in [distributed](distributed)
+* [Public website](../docs-website/docs/deployment/website.md) — the player-facing site
+  that runs alongside the all-in-one variant; its sources are in [website](../website)
 * [Startup parameters and environment variables](../docs-website/docs/deployment/startup-parameters.md)
 
 The website is built from the [docs-website](../docs-website) folder of this

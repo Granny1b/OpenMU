@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>MuSite</RootNamespace>
+    <UserSecretsId>musite-openmu</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="HtmlSanitizer" />
+  </ItemGroup>
+
+  <!-- There is deliberately NO ProjectReference to anything under ../../src.
+       .github/workflows/website.yml fails the build if one appears: the moment this project
+       references OpenMU source, `docker compose pull` stops being an upgrade path for the server. -->
+
+</Project>

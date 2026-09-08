@@ -1,0 +1,16 @@
+@page "/logout"
+@model LogoutModel
+@{
+    ViewData["Title"] = "Sign out";
+}
+
+<div class="mu-panel mu-form-narrow">
+    <div class="mu-panel__head"><h2 class="mu-panel__title">Sign out</h2></div>
+    <div class="mu-panel__body">
+        <p>Sign out of this browser?</p>
+        <form method="post">
+            <button class="mu-btn mu-btn--primary" type="submit">Sign out</button>
+            <a class="mu-btn" href="/account">Stay signed in</a>
+        </form>
+    </div>
+</div>

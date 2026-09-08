@@ -23,7 +23,8 @@
     <None Include="nginx\nginx.prod443.conf" />
     <None Include="nginx\nginx.prod80.conf" />
     <None Include="nginx\templates\nginx.prod.certificates.conf.template" />
-    <None Include="nginx\templates\nginx.server_name.conf.template" />
+    <None Include="nginx\templates\nginx.site_server_name.conf.template" />
+    <None Include="nginx\templates\nginx.admin_server_name.conf.template" />
     <None Include="README.md" />
   </ItemGroup>
 </Project>

@@ -8,6 +8,11 @@ services:
     ports:
       - "8081:8080"
 
+  mu-site:
+    restart: "no"
+
   database:
+    # Local development only. The production command does not include this override file, and the
+    # base compose deliberately publishes no database port at all.
     ports:
       - "5433:5432"

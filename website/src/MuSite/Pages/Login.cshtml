@@ -1,0 +1,40 @@
+@page "/login"
+@model LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+}
+
+<h1>Sign in</h1>
+
+<div class="mu-panel mu-form-narrow">
+    <div class="mu-panel__body">
+        @if (Model.Notice is { } notice)
+        {
+            <div class="mu-notice mu-notice--ok">@notice</div>
+        }
+        @if (Model.Error is { } error)
+        {
+            <div class="mu-notice mu-notice--danger">@error</div>
+        }
+
+        <form method="post">
+            <div class="mu-field">
+                <label class="mu-label" for="Input_LoginName">Account name</label>
+                <input class="mu-input" id="Input_LoginName" name="Input.LoginName" maxlength="10"
+                       value="@Model.Input.LoginName" autocomplete="username" required autofocus />
+                <p class="mu-hint">Exactly as you typed it when you registered &mdash; capitalisation matters,
+                   the same as in the game.</p>
+            </div>
+
+            <div class="mu-field">
+                <label class="mu-label" for="Input_Password">Password</label>
+                <input class="mu-input" id="Input_Password" name="Input.Password" type="password"
+                       autocomplete="current-password" required />
+            </div>
+
+            <button class="mu-btn mu-btn--primary" type="submit">Sign in</button>
+        </form>
+
+        <p class="mu-hint">No account yet? <a href="/register">Create one</a>.</p>
+    </div>
+</div>

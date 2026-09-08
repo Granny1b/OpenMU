@@ -1,0 +1,55 @@
+@page "/news/{slug?}"
+@model NewsModel
+@{
+    ViewData["Title"] = Model.Single?.Title ?? "News";
+}
+
+@if (Model.Single is { } post)
+{
+    <h1>@post.Title</h1>
+    <p class="mu-muted" style="margin-top:-8px">
+        @post.PublishedAt?.ToString("yyyy-MM-dd") &middot; @post.Author
+    </p>
+    <div class="mu-panel">
+        <div class="mu-panel__body">
+            @* Rendered and sanitised when it was saved: Markdig with DisableHtml, then HtmlSanitizer. *@
+            @Html.Raw(post.BodyHtml)
+        </div>
+    </div>
+    <p><a href="/news">All announcements</a></p>
+}
+else
+{
+    <h1>News</h1>
+
+    @if (Model.Posts.Count == 0)
+    {
+        <div class="mu-panel">
+            <div class="mu-panel__body">
+                <div class="mu-empty">
+                    <div class="mu-empty__title">Nothing announced yet</div>
+                    Server news and patch notes will appear here.
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        foreach (var item in Model.Posts)
+        {
+            <div class="mu-panel">
+                <div class="mu-panel__head">
+                    <h2 class="mu-panel__title"><a href="/news/@item.Slug">@item.Title</a></h2>
+                    <span class="mu-panel__aside">
+                        @if (item.IsPinned)
+                        {
+                            <span class="mu-badge">Pinned</span>
+                        }
+                        @item.PublishedAt?.ToString("yyyy-MM-dd")
+                    </span>
+                </div>
+                <div class="mu-panel__body">@Html.Raw(item.BodyHtml)</div>
+            </div>
+        }
+    }
+}

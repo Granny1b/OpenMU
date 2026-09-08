@@ -33,10 +33,16 @@ cd OpenMU/deploy/all-in-one
 To use the official docker image, just run:
 
 ```bash
+docker compose build mu-site
 docker compose up -d --no-build
 ```
 
-That's it. It's then available on your local computer through a loopback IP.
+The first command builds the [public website](website.md), which has no published image; the second
+then starts everything without rebuilding OpenMU itself from source.
+
+That's it. The website is available on your local computer through a loopback IP, and the admin
+panel moves to [http://admin.localhost/](http://admin.localhost/) — the panel occupies `/` and
+cannot be sub-pathed, so the two need separate hostnames.
 
 If you want to make it available through the internet, choose option B.
 
@@ -69,8 +75,15 @@ Replace `example.org` with your domain:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ -d example.org
+  run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ \
+  -d example.org -d www.example.org -d admin.example.org
 ```
+
+:::warning[All names in one run]
+nginx reads certificates from a single path, `/etc/nginx/ssl/live/$DOMAIN_NAME/`, so every hostname
+must be on one certificate. Separate runs produce separate directories and nginx will only ever look
+in the first. See [Public website](website.md).
+:::
 
 ### Set up certificate renewal
 
@@ -89,7 +102,8 @@ playing right away.
 
 Additionally, take a look at the [admin panel](../admin-panel/overview.md). If
 your containers run on docker at your local machine, you can simply go to
-[http://localhost/](http://localhost/).
+[http://admin.localhost/](http://admin.localhost/) — `http://localhost/` now serves the
+[public website](website.md) instead.
 
 :::danger[Create a user before you expose the server]
 Until the first admin panel user exists, the panel is reachable without a login.
