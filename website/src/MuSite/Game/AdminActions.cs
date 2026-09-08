@@ -257,8 +257,10 @@ public sealed class AdminActions(
         RegistrationCounts counts;
         await using (var game = await sources.GameReg.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
         {
-            // A named shape, not a ValueTuple: Dapper maps records by constructor parameter name and
-            // does not reliably map to positional tuples.
+            // A named shape, not a ValueTuple: Dapper cannot map to positional tuples at all. It
+            // matches a record's constructor parameters to the reader's columns BY POSITION,
+            // comparing names pairwise at each index - so the column order here has to stay in
+            // RegistrationCounts' declaration order (Today, Week), not merely carry both names.
             counts = await game.QuerySingleAsync<RegistrationCounts>(new CommandDefinition(
                 """
                 SELECT count(*) FILTER (WHERE "RegistrationDate" >= date_trunc('day', now() AT TIME ZONE 'UTC'))::int AS Today,

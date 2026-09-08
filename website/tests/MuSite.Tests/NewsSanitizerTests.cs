@@ -38,11 +38,22 @@ public class NewsSanitizerTests
     }
 
     [Fact]
-    public void EventHandlerAttributesAreStripped()
+    public void AnEventHandlerNeverBecomesAnAttribute()
     {
         var html = NewsStore.Render("""<img src="x" onerror="alert(1)" />""");
 
-        Assert.DoesNotContain("onerror", html, StringComparison.OrdinalIgnoreCase);
+        // DisableHtml escapes the tag, so what reaches the browser is the TEXT
+        // `&lt;img src="x" onerror="alert(1)" /&gt;` inside a paragraph. The literal substring
+        // "onerror" therefore survives in the output and always will - but with the angle brackets
+        // escaped there is no img element for it to be an attribute of, and an attribute that is
+        // not on an element cannot fire. Asserting on that substring tests the wrong thing; these
+        // two assertions test the property that matters.
+        Assert.DoesNotContain("<img", html, StringComparison.OrdinalIgnoreCase);
+
+        // The positive half is not redundant. Without it, an output where the input had been
+        // dropped entirely - or where Render had thrown and returned nothing - would pass just as
+        // happily as one where the escaping worked.
+        Assert.Contains("&lt;img", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
