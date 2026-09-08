@@ -19,6 +19,7 @@ namespace MuSite.Tests;
 ///
 /// Skipped when MUSITE_TEST_DB is unset, so `dotnet test` works without a database.
 /// </summary>
+[Collection(DatabaseCollection.Name)]
 public sealed class PublicQueriesTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString = Environment.GetEnvironmentVariable("MUSITE_TEST_DB");

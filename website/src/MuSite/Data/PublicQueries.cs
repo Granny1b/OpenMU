@@ -204,8 +204,19 @@ public sealed class PublicQueries(SiteDataSources sources)
                  WHERE sa."CharacterId" IS NOT NULL
                  GROUP BY sa."CharacterId", sa."DefinitionId"
             )
+            -- COLUMN ORDER IS LOAD-BEARING. Dapper's DefaultTypeMap.FindConstructor walks the
+            -- constructor parameters and the reader's columns TOGETHER by index, comparing
+            -- ctorParameters[i].Name to names[i]. A column list that carries every name but in a
+            -- different order matches nothing, and Dapper throws "a parameterless default
+            -- constructor or one matching signature (...) is required" at the first row - not at
+            -- compile time, and not on an empty result. This list is in CharacterProfile's
+            -- declaration order (Name, Class, Level, MasterLevel, Resets, Pk, ...); keep it that
+            -- way, and change both together or neither.
             SELECT c."Name"                    AS Name,
                    cl."Name"                   AS Class,
+                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @levelId), 0)::int      AS Level,
+                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @masterId), 0)::int     AS MasterLevel,
+                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @resetId), 0)::int      AS Resets,
                    c."PlayerKillCount"         AS Pk,
                    c."State"                   AS HeroState,
                    c."CharacterStatus"         AS CharStatus,
@@ -213,9 +224,6 @@ public sealed class PublicQueries(SiteDataSources sources)
                    m."Name"                    AS Map,
                    g."Name"                    AS Guild,
                    gm."Status"::int            AS GuildPosition,
-                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @levelId), 0)::int      AS Level,
-                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @masterId), 0)::int     AS MasterLevel,
-                   COALESCE(MAX(s.val) FILTER (WHERE s.def = @resetId), 0)::int      AS Resets,
                    COALESCE(MAX(s.val) FILTER (WHERE s.def = @strId), 0)::int        AS Strength,
                    COALESCE(MAX(s.val) FILTER (WHERE s.def = @agiId), 0)::int        AS Agility,
                    COALESCE(MAX(s.val) FILTER (WHERE s.def = @vitId), 0)::int        AS Vitality,
