@@ -207,9 +207,14 @@ app.Use(async (context, next) =>
     await next().ConfigureAwait(false);
 });
 
-// Re-executes into /not-found so a 404 arrives on a themed page rather than a blank browser default,
-// while keeping the 404 status code for crawlers.
-app.UseStatusCodePagesWithReExecute("/not-found");
+// Re-executes into /status so an error arrives on a themed page rather than a blank browser default,
+// while keeping the original status code for crawlers.
+//
+// The code is PASSED ON. Pointing every status at a single "not found" page told a rate-limited
+// visitor (429), one whose anti-forgery token had expired (400) and one who was forbidden (403)
+// that the page did not exist - three different problems, all reported as the one thing that was
+// not true, with nothing to act on.
+app.UseStatusCodePagesWithReExecute("/status", "?code={0}");
 
 app.UseStaticFiles();
 app.UseRouting();
