@@ -1,0 +1,309 @@
+/* MU site theme. Hand-written, no framework, no CDN, no webfont request.
+   Nothing here loads an external resource, which keeps a LAN-only server working and lets the CSP
+   stay strict (no 'unsafe-inline', no third-party origins).
+
+   Accent is deep MU crimson #8a1c1c, matching docs-website/src/css/custom.css:7 and deliberately
+   distinct from the admin panel's Bootstrap blue - different audiences, different surfaces.
+   Contrast ratios in the comments are measured against the surface the token sits on. */
+
+:root {
+  color-scheme: light dark;
+
+  --mu-bg: #efe6d2;
+  --mu-bg-deep: #e2d6bb;
+  --mu-surface: #f7f0e0;
+  --mu-raised: #fffaf0;
+
+  --mu-ink: #2b2419;            /* 12.4:1 */
+  --mu-ink-muted: #6b5d47;      /* 5.2:1  */
+
+  --mu-border: #c9b892;
+  --mu-border-strong: #967c48;  /* 3.2:1 - meets 3:1 for non-text */
+
+  --mu-gold: #a8801f;           /* 2.9:1 - ORNAMENT ONLY, never text */
+  --mu-gold-ink: #7a5c12;       /* 5.0:1 - use whenever gold must carry text */
+
+  --mu-crimson: #8a1c1c;        /* 7.5:1 */
+  --mu-crimson-hi: #a32020;
+  --mu-on-crimson: #fffaf0;     /* 8.9:1 on crimson */
+
+  --mu-success: #2f6b3a;
+  --mu-warning: #8a6410;
+  --mu-danger: #a32020;
+  --mu-info: #17557d;
+
+  --mu-track: #e2d6bb;
+  --mu-radius: 2px;
+  --mu-shadow: 0 1px 0 rgba(0, 0, 0, .06);
+
+  --mu-serif: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --mu-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mu-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mu-theme="light"]) {
+    --mu-bg: #14120f;
+    --mu-bg-deep: #0e0c0a;
+    --mu-surface: #211d18;
+    --mu-raised: #2a251e;
+
+    --mu-ink: #e8dfcb;          /* 14.1:1 */
+    --mu-ink-muted: #a2967d;    /* 6.4:1  */
+
+    --mu-border: #3a332a;
+    --mu-border-strong: #7a6743;
+
+    --mu-gold: #d4af5f;         /* 9.0:1 - safe as text on dark */
+    --mu-gold-ink: #e2c076;
+
+    --mu-crimson: #b32b2b;
+    --mu-crimson-hi: #cc3636;
+    --mu-on-crimson: #fff6ec;
+
+    --mu-success: #63b36f;
+    --mu-warning: #d1a13c;
+    --mu-danger: #e06666;
+    --mu-info: #6bb4e6;
+
+    --mu-track: #0e0c0a;
+    --mu-shadow: 0 1px 0 rgba(0, 0, 0, .5);
+  }
+}
+
+:root[data-mu-theme="dark"] {
+  --mu-bg: #14120f;
+  --mu-bg-deep: #0e0c0a;
+  --mu-surface: #211d18;
+  --mu-raised: #2a251e;
+  --mu-ink: #e8dfcb;
+  --mu-ink-muted: #a2967d;
+  --mu-border: #3a332a;
+  --mu-border-strong: #7a6743;
+  --mu-gold: #d4af5f;
+  --mu-gold-ink: #e2c076;
+  --mu-crimson: #b32b2b;
+  --mu-crimson-hi: #cc3636;
+  --mu-on-crimson: #fff6ec;
+  --mu-success: #63b36f;
+  --mu-warning: #d1a13c;
+  --mu-danger: #e06666;
+  --mu-info: #6bb4e6;
+  --mu-track: #0e0c0a;
+  --mu-shadow: 0 1px 0 rgba(0, 0, 0, .5);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mu-bg);
+  color: var(--mu-ink);
+  font-family: var(--mu-sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+a { color: var(--mu-crimson); text-decoration: none; }
+a:hover { color: var(--mu-crimson-hi); text-decoration: underline; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--mu-crimson);
+  outline-offset: 2px;
+}
+
+h1, h2, h3 { font-family: var(--mu-serif); font-weight: 600; letter-spacing: .01em; margin: 0 0 .5em; }
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.05rem; }
+
+/* --- shell ------------------------------------------------------------------------------- */
+.mu-shell { max-width: 1080px; margin: 0 auto; padding: 0 16px 48px; }
+
+.mu-top {
+  background: var(--mu-bg-deep);
+  border-bottom: 1px solid var(--mu-border-strong);
+}
+.mu-top__inner {
+  max-width: 1080px; margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.mu-brand {
+  font-family: var(--mu-serif); font-size: 1.15rem; font-weight: 700;
+  color: var(--mu-ink); text-transform: uppercase; letter-spacing: .08em;
+}
+.mu-brand:hover { color: var(--mu-crimson); text-decoration: none; }
+.mu-brand__mark { color: var(--mu-crimson); }
+
+.mu-nav { display: flex; gap: 2px; flex-wrap: wrap; margin-left: auto; }
+.mu-nav a {
+  padding: 6px 12px; color: var(--mu-ink-muted); font-size: .87rem;
+  text-transform: uppercase; letter-spacing: .06em; border: 1px solid transparent;
+  border-radius: var(--mu-radius);
+}
+.mu-nav a:hover { color: var(--mu-ink); background: var(--mu-surface); text-decoration: none; }
+.mu-nav a[aria-current="page"] {
+  color: var(--mu-ink); background: var(--mu-surface);
+  border-color: var(--mu-border); border-bottom-color: var(--mu-crimson);
+}
+
+.mu-foot {
+  border-top: 1px solid var(--mu-border);
+  margin-top: 40px; padding: 18px 0;
+  color: var(--mu-ink-muted); font-size: .82rem;
+}
+
+/* --- panel ------------------------------------------------------------------------------- */
+.mu-panel {
+  background: var(--mu-surface);
+  border: 1px solid var(--mu-border);
+  border-radius: var(--mu-radius);
+  box-shadow: var(--mu-shadow);
+  margin: 0 0 20px;
+}
+.mu-panel__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  background: var(--mu-bg-deep);
+  border-bottom: 1px solid var(--mu-border);
+  border-top: 2px solid var(--mu-gold);
+}
+.mu-panel__title {
+  margin: 0; font-family: var(--mu-serif); font-size: .95rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .09em; color: var(--mu-ink);
+}
+.mu-panel__aside { margin-left: auto; font-size: .8rem; color: var(--mu-ink-muted); }
+.mu-panel__body { padding: 14px; }
+.mu-panel__body > :last-child { margin-bottom: 0; }
+
+/* --- hero -------------------------------------------------------------------------------- */
+.mu-hero {
+  border: 1px solid var(--mu-border-strong);
+  border-top: 3px solid var(--mu-crimson);
+  background: var(--mu-raised);
+  padding: 26px 22px;
+  margin: 20px 0;
+  text-align: center;
+}
+.mu-hero h1 { margin-bottom: .25em; }
+.mu-hero p { margin: 0 auto 16px; max-width: 46em; color: var(--mu-ink-muted); }
+
+/* --- status strip ------------------------------------------------------------------------ */
+.mu-status { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--mu-border); background: var(--mu-surface); }
+.mu-status__cell {
+  flex: 1 1 150px; padding: 10px 14px; border-right: 1px solid var(--mu-border);
+}
+.mu-status__cell:last-child { border-right: 0; }
+.mu-status__label {
+  display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--mu-ink-muted);
+}
+.mu-status__value { font-family: var(--mu-serif); font-size: 1.2rem; font-weight: 700; }
+
+/* --- tables ------------------------------------------------------------------------------ */
+.mu-tablewrap { overflow-x: auto; }
+.mu-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.mu-table th {
+  text-align: left; padding: 8px 10px;
+  background: var(--mu-bg-deep);
+  border-bottom: 1px solid var(--mu-border-strong);
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mu-ink-muted);
+  white-space: nowrap;
+}
+.mu-table td { padding: 8px 10px; border-bottom: 1px solid var(--mu-border); }
+.mu-table tbody tr:hover { background: var(--mu-raised); }
+.mu-table__num { text-align: right; font-variant-numeric: tabular-nums; }
+.mu-rank { font-family: var(--mu-serif); font-weight: 700; color: var(--mu-ink-muted); width: 3em; }
+.mu-rank--1 { color: var(--mu-gold-ink); }
+.mu-rank--2, .mu-rank--3 { color: var(--mu-ink); }
+
+/* --- badges ------------------------------------------------------------------------------ */
+.mu-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 9px;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+  border: 1px solid var(--mu-border-strong); color: var(--mu-ink-muted); background: var(--mu-raised);
+}
+.mu-badge--gm { border-color: var(--mu-gold); color: var(--mu-gold-ink); }
+.mu-badge--pk { border-color: var(--mu-danger); color: var(--mu-danger); }
+.mu-badge--hero { border-color: var(--mu-info); color: var(--mu-info); }
+.mu-badge--banned { border-color: var(--mu-danger); color: var(--mu-on-crimson); background: var(--mu-crimson); }
+.mu-badge--ok { border-color: var(--mu-success); color: var(--mu-success); }
+
+/* --- buttons ----------------------------------------------------------------------------- */
+.mu-btn {
+  display: inline-block; padding: 7px 16px; cursor: pointer;
+  font: inherit; font-size: .85rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--mu-ink); background: var(--mu-raised);
+  border: 1px solid var(--mu-border-strong); border-radius: var(--mu-radius);
+}
+.mu-btn:hover { background: var(--mu-bg-deep); text-decoration: none; }
+.mu-btn--primary { background: var(--mu-crimson); border-color: var(--mu-crimson); color: var(--mu-on-crimson); }
+.mu-btn--primary:hover { background: var(--mu-crimson-hi); color: var(--mu-on-crimson); }
+.mu-btn--danger { border-color: var(--mu-danger); color: var(--mu-danger); }
+.mu-btn--sm { padding: 3px 9px; font-size: .75rem; }
+
+/* --- forms ------------------------------------------------------------------------------- */
+.mu-field { margin-bottom: 14px; }
+.mu-label {
+  display: block; margin-bottom: 4px;
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mu-ink-muted);
+}
+.mu-input {
+  width: 100%; padding: 7px 9px; font: inherit;
+  color: var(--mu-ink); background: var(--mu-raised);
+  border: 1px solid var(--mu-border-strong); border-radius: var(--mu-radius);
+}
+.mu-hint { margin: 4px 0 0; font-size: .78rem; color: var(--mu-ink-muted); }
+.mu-error { color: var(--mu-danger); font-size: .82rem; }
+.mu-form-narrow { max-width: 380px; }
+
+/* --- notices ----------------------------------------------------------------------------- */
+.mu-notice {
+  padding: 10px 14px; margin-bottom: 16px;
+  border: 1px solid var(--mu-border-strong); border-left-width: 3px;
+  background: var(--mu-raised); font-size: .88rem;
+}
+.mu-notice--warn { border-left-color: var(--mu-warning); }
+.mu-notice--danger { border-left-color: var(--mu-danger); }
+.mu-notice--ok { border-left-color: var(--mu-success); }
+
+/* --- stat bars ---------------------------------------------------------------------------- */
+/* Width comes from a step class, never a style attribute, so the CSP needs no inline-style
+   allowance. 21 steps of 5% is enough resolution for a stat bar and costs ~20 lines. */
+.mu-bar { display: block; height: 8px; background: var(--mu-track); border: 1px solid var(--mu-border); }
+.mu-bar__fill { display: block; height: 100%; background: var(--mu-crimson); }
+.mu-bar__fill--p0 { width: 0; }
+.mu-bar__fill--p5 { width: 5%; }
+.mu-bar__fill--p10 { width: 10%; }
+.mu-bar__fill--p15 { width: 15%; }
+.mu-bar__fill--p20 { width: 20%; }
+.mu-bar__fill--p25 { width: 25%; }
+.mu-bar__fill--p30 { width: 30%; }
+.mu-bar__fill--p35 { width: 35%; }
+.mu-bar__fill--p40 { width: 40%; }
+.mu-bar__fill--p45 { width: 45%; }
+.mu-bar__fill--p50 { width: 50%; }
+.mu-bar__fill--p55 { width: 55%; }
+.mu-bar__fill--p60 { width: 60%; }
+.mu-bar__fill--p65 { width: 65%; }
+.mu-bar__fill--p70 { width: 70%; }
+.mu-bar__fill--p75 { width: 75%; }
+.mu-bar__fill--p80 { width: 80%; }
+.mu-bar__fill--p85 { width: 85%; }
+.mu-bar__fill--p90 { width: 90%; }
+.mu-bar__fill--p95 { width: 95%; }
+.mu-bar__fill--p100 { width: 100%; }
+
+/* --- stat grid, empty state, pagination --------------------------------------------------- */
+.mu-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.mu-stat__label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--mu-ink-muted); }
+.mu-stat__value { font-family: var(--mu-serif); font-size: 1.1rem; font-weight: 700; }
+
+.mu-empty { padding: 28px 14px; text-align: center; color: var(--mu-ink-muted); }
+.mu-empty__title { font-family: var(--mu-serif); font-size: 1rem; color: var(--mu-ink); margin-bottom: 4px; }
+
+.mu-pager { display: flex; gap: 6px; align-items: center; justify-content: center; padding: 12px 0 0; font-size: .85rem; }
+
+.mu-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.mu-muted { color: var(--mu-ink-muted); }
+.mu-mono { font-family: var(--mu-mono); font-size: .85em; }
+.mu-center { text-align: center; }

@@ -1,0 +1,39 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = null;
+}
+
+<div class="mu-hero">
+    <h1>@Model.ServerName</h1>
+    <p>A private MU Online server running on OpenMU.</p>
+    <a class="mu-btn mu-btn--primary" href="/register">Create an account</a>
+    <a class="mu-btn" href="/downloads">How to connect</a>
+</div>
+
+<div class="mu-status">
+    <div class="mu-status__cell">
+        <span class="mu-status__label">Server</span>
+        <span class="mu-status__value">@(Model.SchemaHealthy ? "Online" : "Maintenance")</span>
+    </div>
+    <div class="mu-status__cell">
+        <span class="mu-status__label">Version</span>
+        <span class="mu-status__value">Season 6</span>
+    </div>
+</div>
+
+<div class="mu-panel">
+    <div class="mu-panel__head"><h2 class="mu-panel__title">Build status</h2></div>
+    <div class="mu-panel__body">
+        <p>Phase 0 is in place: database roles, column-level grants, the schema contract and the theme.
+           Rankings, registration and the admin area arrive in phases 1 to 3.</p>
+        @if (!Model.SchemaHealthy)
+        {
+            <div class="mu-notice mu-notice--danger">
+                The schema contract is failing. Check <span class="mu-mono">/healthz/schema</span> on the
+                internal port. After a <span class="mu-mono">-reinit</span>, re-run
+                <span class="mu-mono">website/db/01b-grants.sql</span>.
+            </div>
+        }
+    </div>
+</div>

@@ -1,0 +1,80 @@
+# CI for the public website (/website). Lives at the repository root because GitHub Actions only
+# discovers workflows in the root .github/workflows - a copy under website/.github/workflows would
+# be silently inert, taking both safety nets with it.
+name: Website
+
+on:
+  push:
+    branches: [ master, main ]
+    paths: [ 'website/**', '.github/workflows/website.yml' ]
+  pull_request:
+    paths: [ 'website/**', '.github/workflows/website.yml' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: openmu_web_ci
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: [ '5432:5432' ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The website must never reference OpenMU source: that reference is what would turn a
+      # `docker compose pull` upgrade into a fork merge.
+      - name: No ProjectReference into the server tree
+        run: |
+          if grep -q 'ProjectReference' src/MuSite/MuSite.csproj; then
+            echo "::error::src/MuSite/MuSite.csproj must not reference any project."
+            exit 1
+          fi
+
+      # The two package files must agree on BCrypt, or a password hashed by the site may not verify
+      # in the game - an account that is created and can never log in, with no error anywhere.
+      - name: BCrypt version matches the server
+        run: |
+          site=$(grep -oP 'BCrypt\.Net-Next" Version="\K[^"]+' Directory.Packages.props)
+          game=$(grep -oP 'BCrypt\.Net-Next" Version="\K[^"]+' ../src/Directory.Packages.props)
+          echo "website=$site server=$game"
+          if [ "$site" != "$game" ]; then
+            echo "::error::BCrypt.Net-Next is $site here and $game in src/Directory.Packages.props."
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+      - name: Site schema applies cleanly and is idempotent
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 \
+               -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='mu_web_app') THEN CREATE ROLE mu_web_app LOGIN PASSWORD 'ci'; END IF; END \$\$;"
+          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+
+      - name: Docker image builds
+        run: docker build -t mu-site:ci .

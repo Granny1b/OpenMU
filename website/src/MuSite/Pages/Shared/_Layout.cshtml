@@ -1,0 +1,53 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<SiteOptions> SiteOptions
+@{
+    var serverName = SiteOptions.Value.ServerName;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] is null ? serverName : $"{ViewData["Title"]} - {serverName}")</title>
+    <link rel="stylesheet" href="~/css/mu.css" asp-append-version="true" />
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+    <header class="mu-top">
+        <div class="mu-top__inner">
+            <a class="mu-brand" href="/"><span class="mu-brand__mark">&#9670;</span> @serverName</a>
+            <nav class="mu-nav">
+                <a href="/rankings/level">Rankings</a>
+                <a href="/guilds">Guilds</a>
+                <a href="/news">News</a>
+                <a href="/downloads">Play</a>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    @if (User.HasClaim(SitePolicies.RoleClaim, nameof(SiteRole.Admin))
+                         || User.HasClaim(SitePolicies.RoleClaim, nameof(SiteRole.Owner)))
+                    {
+                        <a href="/admin">Admin</a>
+                    }
+                    <a href="/account">Account</a>
+                }
+                else
+                {
+                    <a href="/register">Register</a>
+                    <a href="/login">Sign in</a>
+                }
+            </nav>
+        </div>
+    </header>
+
+    <main class="mu-shell">
+        @RenderBody()
+    </main>
+
+    <footer class="mu-foot">
+        <div class="mu-shell">
+            @serverName &middot; powered by <a href="https://github.com/MUnique/OpenMU">OpenMU</a>
+            &middot; <a href="/rules">Rules</a> &middot; <a href="/privacy">Privacy</a>
+        </div>
+    </footer>
+</body>
+</html>

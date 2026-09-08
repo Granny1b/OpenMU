@@ -1,0 +1,14 @@
+# One-shot container that applies website/db/web/*.sql to the openmu_web database as mu_web_own.
+#
+#   docker compose run --rm mu-site-migrate
+#
+# This is the ONLY place mu_web_own credentials appear. The running site connects as mu_web_app,
+# which is not the owner of that database - that non-ownership is what makes audit_log genuinely
+# append-only, since an owner could always re-grant itself DELETE.
+FROM postgres:16-alpine
+
+COPY db/web/ /migrations/
+COPY scripts/migrate.sh /migrate.sh
+RUN chmod +x /migrate.sh
+
+ENTRYPOINT ["/migrate.sh"]
