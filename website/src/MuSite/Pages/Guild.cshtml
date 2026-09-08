@@ -1,0 +1,62 @@
+@page "/guild/{name}"
+@model GuildModel
+@using MuSite.Game
+@{
+    ViewData["Title"] = Model.Guild!.Name;
+    var g = Model.Guild!;
+}
+
+<h1>@g.Name</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    Score @g.Score.ToString("N0") &middot; @g.Members.Count member@(g.Members.Count == 1 ? "" : "s")
+</p>
+
+<div class="mu-panel">
+    <div class="mu-panel__head">
+        <h2 class="mu-panel__title">Roster</h2>
+        <span class="mu-panel__aside">updated @Model.Age</span>
+    </div>
+    <div class="mu-panel__body">
+        @if (!string.IsNullOrWhiteSpace(g.Notice))
+        {
+            <div class="mu-notice">@g.Notice</div>
+        }
+
+        @if (g.Members.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">No members to show</div>
+                This guild has no members on active accounts.
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead><tr><th>Character</th><th>Position</th><th>Class</th><th class="mu-table__num">Level</th><th class="mu-table__num">Resets</th></tr></thead>
+                    <tbody>
+                    @foreach (var member in g.Members)
+                    {
+                        <tr>
+                            <td><a href="/character/@Uri.EscapeDataString(member.Name)">@member.Name</a></td>
+                            <td>
+                                @if (member.Position == GameEnums.GuildPosition.GuildMaster)
+                                {
+                                    <span class="mu-badge mu-badge--gm">Guild Master</span>
+                                }
+                                else
+                                {
+                                    @GameEnums.GuildPosition.Describe(member.Position)
+                                }
+                            </td>
+                            <td>@(member.Class ?? "—")</td>
+                            <td class="mu-table__num">@member.Level</td>
+                            <td class="mu-table__num">@member.Resets</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

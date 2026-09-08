@@ -37,9 +37,7 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
     /// <summary>The current failures, keyed by role name. Surfaced on /healthz/schema.</summary>
     public IReadOnlyDictionary<string, string[]> Failures => this._failures;
 
-    /// <summary>
-    /// Runs the contract for every role. Returns true when all of them pass.
-    /// </summary>
+    /// <summary>Runs the contract for every role. Returns true when all of them pass.</summary>
     public async Task<bool> CheckAsync(CancellationToken cancellationToken = default)
     {
         await this.CheckRoleAsync("mu_web_read", sources.GameRead, checkAttributeIds: true, cancellationToken).ConfigureAwait(false);
@@ -61,24 +59,71 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
         return false;
     }
 
-    private static async Task<bool> CanReadAsync(NpgsqlDataSource source, string schema, string table, string column, CancellationToken cancellationToken)
+    /// <summary>
+    /// Returns which of the wanted columns this role can actually read.
+    ///
+    /// TWO queries, deliberately. has_column_privilege RAISES for a column that does not exist - it
+    /// does not return false - and PostgreSQL does not guarantee that AND short-circuits, so
+    /// combining the existence test and the privilege test in one predicate throws exactly when a
+    /// column has been renamed upstream: the case this contract exists to detect. Existence is
+    /// settled first, then privileges are asked only about columns that are really there.
+    ///
+    /// Still one round trip each, not one per column - the whole set goes over as three arrays.
+    /// </summary>
+    private static async Task<HashSet<string>> ReadableColumnsAsync(
+        NpgsqlDataSource source,
+        (string Schema, string Table, string Column)[] wanted,
+        CancellationToken cancellationToken)
     {
-        // has_column_privilege answers the question the site actually cares about - "can THIS role
-        // read THIS column" - which information_schema.columns alone does not, because a column can
-        // exist while the grant on it is gone.
-        await using var command = source.CreateCommand(
-            """
-            SELECT EXISTS (
-                     SELECT 1 FROM information_schema.columns
-                      WHERE table_schema = @schema AND table_name = @table AND column_name = @column)
-                   AND has_column_privilege(format('%I.%I', @schema, @table), @column, 'SELECT')
-            """);
-        command.Parameters.AddWithValue("schema", schema);
-        command.Parameters.AddWithValue("table", table);
-        command.Parameters.AddWithValue("column", column);
+        await using var connection = await source.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return result is true;
+        var existing = new List<(string Schema, string Table, string Column)>();
+        await using (var exists = connection.CreateCommand())
+        {
+            exists.CommandText =
+                """
+                SELECT w.s, w.t, w.c
+                  FROM unnest(@schemas, @tables, @columns) AS w(s, t, c)
+                  JOIN information_schema.columns col
+                    ON col.table_schema = w.s AND col.table_name = w.t AND col.column_name = w.c
+                """;
+            exists.Parameters.AddWithValue("schemas", wanted.Select(x => x.Schema).ToArray());
+            exists.Parameters.AddWithValue("tables", wanted.Select(x => x.Table).ToArray());
+            exists.Parameters.AddWithValue("columns", wanted.Select(x => x.Column).ToArray());
+
+            await using var reader = await exists.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                existing.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            }
+        }
+
+        var readable = new HashSet<string>(StringComparer.Ordinal);
+        if (existing.Count == 0)
+        {
+            return readable;
+        }
+
+        await using (var granted = connection.CreateCommand())
+        {
+            granted.CommandText =
+                """
+                SELECT w.s || '.' || w.t || '.' || w.c
+                  FROM unnest(@schemas, @tables, @columns) AS w(s, t, c)
+                 WHERE has_column_privilege(format('%I.%I', w.s, w.t), w.c, 'SELECT')
+                """;
+            granted.Parameters.AddWithValue("schemas", existing.Select(x => x.Schema).ToArray());
+            granted.Parameters.AddWithValue("tables", existing.Select(x => x.Table).ToArray());
+            granted.Parameters.AddWithValue("columns", existing.Select(x => x.Column).ToArray());
+
+            await using var reader = await granted.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                readable.Add(reader.GetString(0));
+            }
+        }
+
+        return readable;
     }
 
     private async Task CheckRoleAsync(string role, NpgsqlDataSource source, bool checkAttributeIds, CancellationToken cancellationToken)
@@ -87,17 +132,22 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
 
         try
         {
-            foreach (var (schema, table, columns) in GameTables)
+            // Every role is granted a subset, so only the columns THIS role needs are checked -
+            // a column it was never meant to read is not a failure.
+            var required = GameTables
+                .SelectMany(t => t.Columns.Select(column => (t.Schema, t.Table, Column: column)))
+                .Where(x => IsRequiredFor(role, x.Schema, x.Table, x.Column))
+                .ToArray();
+
+            if (required.Length > 0)
             {
-                foreach (var column in columns)
+                var readable = await ReadableColumnsAsync(source, required, cancellationToken).ConfigureAwait(false);
+
+                foreach (var (schema, table, column) in required)
                 {
-                    // Every role is granted a subset. A column this role was never meant to read is
-                    // not a failure - only a column it needs and cannot reach, which each query file
-                    // asserts by using it. Here we check reachability of the shared core.
-                    if (!await CanReadAsync(source, schema, table, column, cancellationToken).ConfigureAwait(false)
-                        && IsRequiredFor(role, schema, table, column))
+                    if (!readable.Contains($"{schema}.{table}.{column}"))
                     {
-                        problems.Add($"{schema}.\"{table}\".\"{column}\" is missing or not readable");
+                        problems.Add($"{schema}.{table}.{column} is missing or not readable");
                     }
                 }
             }
@@ -117,7 +167,7 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
 
                 foreach (var missing in StatIds.All.Where(id => !found.Contains(id)))
                 {
-                    problems.Add($"config.\"AttributeDefinition\" has no row {missing} - see Data/StatIds.cs");
+                    problems.Add($"config.AttributeDefinition has no row {missing} - see Data/StatIds.cs");
                 }
             }
         }
@@ -158,10 +208,10 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
 
     private static bool IsRequiredFor(string role, string schema, string table, string column) => role switch
     {
-        // The anonymous pages need everything in the core list.
+        // The anonymous pages read everything in the core list.
         "mu_web_read" => true,
 
-        // Auth only ever touches data."Account", and only the four columns it is granted.
+        // Auth only ever touches data."Account", and only the columns it is granted.
         "mu_web_auth" => schema == "data" && table == "Account" && column is "Id" or "State",
 
         // Registration and the admin views read accounts, characters and guild membership.

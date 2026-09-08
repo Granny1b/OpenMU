@@ -1,10 +1,13 @@
 using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using MuSite;
 using MuSite.Auth;
 using MuSite.Data;
+using MuSite.Live;
+using MuSite.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,14 +42,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 
     var trusted = builder.Configuration.GetSection("TrustedNetworks").Get<string[]>() ?? [];
-    foreach (var cidr in trusted)
+    foreach (var entry in trusted)
     {
-        var parts = cidr.Split('/');
-        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var prefix) && int.TryParse(parts[1], out var length))
+        // Fully qualified: Microsoft.AspNetCore.HttpOverrides also defines an IPNetwork, so the bare
+        // name is ambiguous with both namespaces in scope.
+        if (entry.Contains('/', StringComparison.Ordinal)
+            && System.Net.IPNetwork.TryParse(entry, out var network))
         {
-            options.KnownNetworks.Add(new IPNetwork(prefix, length));
+            options.KnownNetworks.Add(network);
         }
-        else if (IPAddress.TryParse(cidr, out var single))
+        else if (IPAddress.TryParse(entry, out var single))
         {
             options.KnownProxies.Add(single);
         }
@@ -57,8 +62,14 @@ builder.Services.AddSingleton(_ => SiteDataSources.Create(builder.Configuration)
 builder.Services.AddSingleton<SchemaContract>();
 builder.Services.AddHostedService<SchemaContractService>();
 builder.Services.AddSingleton<RoleResolver>();
+builder.Services.AddSingleton<PublicQueries>();
+builder.Services.AddSingleton<RankingCache>();
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
+
+// One instance, resolved both as the hosted service that polls and as the dependency pages read.
+builder.Services.AddSingleton<ServerProbe>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ServerProbe>());
 
 // ---------------------------------------------------------------------------------------------
 // The key ring signs the auth cookie. It is written to /app/keys, which the Dockerfile creates as
@@ -113,14 +124,6 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-// Health lives only on 8081.
-app.MapGet("/healthz", () => Results.Text("ok")).RequireHost("*:8081");
-app.MapGet("/healthz/schema", (SchemaContract contract) =>
-        contract.IsHealthy
-            ? Results.Ok(new { status = "ok" })
-            : Results.Json(new { status = "failed", failures = contract.Failures }, statusCode: 503))
-    .RequireHost("*:8081");
-
 // ---------------------------------------------------------------------------------------------
 // Security headers. The CSP carries no 'unsafe-inline' for styles: every dynamic width in the UI
 // (the stat bars) is expressed with a step class in mu.css rather than a style attribute.
@@ -137,12 +140,25 @@ app.Use(async (context, next) =>
     await next().ConfigureAwait(false);
 });
 
+// Re-executes into /not-found so a 404 arrives on a themed page rather than a blank browser default,
+// while keeping the 404 status code for crawlers.
+app.UseStatusCodePagesWithReExecute("/not-found");
+
 app.UseStaticFiles();
 app.UseRouting();
 app.UseOutputCache();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapRazorPages();
+
+// Health lives only on 8081, which no compose file publishes and no proxy forwards. The payload
+// enumerates schema detail, so nginx also blocks /healthz on 8080 - two independent controls.
+app.MapGet("/healthz", () => Results.Text("ok")).RequireHost("*:8081");
+app.MapGet("/healthz/schema", (SchemaContract contract) =>
+        contract.IsHealthy
+            ? Results.Ok(new { status = "ok" })
+            : Results.Json(new { status = "failed", failures = contract.Failures }, statusCode: 503))
+    .RequireHost("*:8081");
 
 // Fail loudly at startup rather than 500ing on the first page view.
 using (var scope = app.Services.CreateScope())

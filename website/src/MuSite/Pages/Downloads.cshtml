@@ -1,0 +1,47 @@
+@page "/downloads"
+@model DownloadsModel
+@{
+    ViewData["Title"] = "Play";
+}
+
+<h1>Play</h1>
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Connect</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-stats">
+                <div>
+                    <span class="mu-stat__label">Connect server</span>
+                    <div class="mu-stat__value mu-mono">@Model.ConnectHost</div>
+                </div>
+                <div>
+                    <span class="mu-stat__label">Version</span>
+                    <div class="mu-stat__value">Season 6 Episode 3</div>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.ClientUrl))
+            {
+                <p style="margin-top:16px;margin-bottom:0">
+                    <a class="mu-btn mu-btn--primary" href="@Model.ClientUrl" rel="noopener">Download the client</a>
+                </p>
+            }
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Setup</h2></div>
+        <div class="mu-panel__body">
+            <ol style="margin:0 0 12px;padding-left:1.2em">
+                <li>Create an account on this site.</li>
+                <li>Unpack the client somewhere it can write files &mdash; not Program Files.</li>
+                <li>Start the launcher, enter <span class="mu-mono">@Model.ConnectHost</span>, and pick <span class="mu-mono">main.exe</span>.</li>
+                <li>Log in with the account name and password you registered here.</li>
+            </ol>
+            <div class="mu-notice mu-notice--warn">
+                Your password is limited to @Model.MaxPassword characters because that is all the game
+                client can send. A longer one is cut short by the client and will not work.
+            </div>
+        </div>
+    </div>
+</div>

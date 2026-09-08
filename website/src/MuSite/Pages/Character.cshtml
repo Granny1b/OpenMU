@@ -1,0 +1,62 @@
+@page "/character/{name}"
+@model CharacterModel
+@using MuSite.Services
+@{
+    ViewData["Title"] = Model.Profile!.Name;
+    var p = Model.Profile!;
+    var maxStat = Math.Max(1, new[] { p.Strength, p.Agility, p.Vitality, p.Energy, p.Leadership }.Max());
+}
+
+<h1>@p.Name</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    @(p.Class ?? "Unknown class")
+    @if (p.Guild is { } guild)
+    {
+        <text>&middot;</text>
+        <a href="/guild/@Uri.EscapeDataString(guild)">@guild</a>
+    }
+    @if (Model.GuildRank is { } rank)
+    {
+        <span class="mu-badge">@rank</span>
+    }
+    @Html.Raw(Model.Badge)
+</p>
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">Progress</h2>
+            <span class="mu-panel__aside">updated @Model.Age</span>
+        </div>
+        <div class="mu-panel__body">
+            <div class="mu-stats">
+                <div><span class="mu-stat__label">Level</span><div class="mu-stat__value">@p.Level</div></div>
+                <div><span class="mu-stat__label">Master level</span><div class="mu-stat__value">@(p.MasterLevel > 0 ? p.MasterLevel.ToString() : "—")</div></div>
+                <div><span class="mu-stat__label">Resets</span><div class="mu-stat__value">@p.Resets</div></div>
+                <div><span class="mu-stat__label">PK count</span><div class="mu-stat__value">@p.Pk</div></div>
+                <div><span class="mu-stat__label">Location</span><div class="mu-stat__value">@(p.Map ?? "—")</div></div>
+                <div><span class="mu-stat__label">Created</span><div class="mu-stat__value">@p.Created.ToString("yyyy-MM-dd")</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">Base stats</h2>
+            <span class="mu-panel__aside">@Model.TotalPoints.ToString("N0") points</span>
+        </div>
+        <div class="mu-panel__body">
+            @foreach (var (label, value) in Model.Stats)
+            {
+                <div class="mu-field">
+                    <span class="mu-label">@label &mdash; @value.ToString("N0")</span>
+                    <span class="mu-bar"><span class="mu-bar__fill @BarStep.For(value, maxStat)"></span></span>
+                </div>
+            }
+            <p class="mu-hint" style="margin-bottom:0">
+                Base points only. Bonuses from equipment, buffs and master skills are calculated in the
+                game and are not stored per character, so they cannot be shown here.
+            </p>
+        </div>
+    </div>
+</div>

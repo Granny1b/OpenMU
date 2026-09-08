@@ -58,7 +58,7 @@ GRANT SELECT ("Id", "LoginName", "EMail", "RegistrationDate", "State",
 GRANT UPDATE ("State")                                                  ON data."Account" TO mu_web_reg;
 
 GRANT SELECT ("Id", "Name", "AccountId", "CharacterClassId", "CharacterStatus", "State",
-              "Experience", "PlayerKillCount", "CreateDate")            ON data."Character" TO mu_web_reg;
+              "Experience", "MasterExperience", "PlayerKillCount", "CreateDate") ON data."Character" TO mu_web_reg;
 GRANT SELECT ("CharacterId", "DefinitionId", "Value")                   ON data."StatAttribute" TO mu_web_reg;
 GRANT SELECT ("Id", "Number", "Name")                                   ON config."CharacterClass" TO mu_web_reg;
 GRANT SELECT ("Id", "GuildId", "Status")                                ON guild."GuildMember" TO mu_web_reg;

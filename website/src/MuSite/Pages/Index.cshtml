@@ -1,5 +1,6 @@
 @page
 @model IndexModel
+@using MuSite.Data
 @{
     ViewData["Title"] = null;
 }
@@ -14,7 +15,15 @@
 <div class="mu-status">
     <div class="mu-status__cell">
         <span class="mu-status__label">Server</span>
-        <span class="mu-status__value">@(Model.SchemaHealthy ? "Online" : "Maintenance")</span>
+        <span class="mu-status__value">@(Model.IsUp ? "Online" : "Offline")</span>
+    </div>
+    <div class="mu-status__cell">
+        <span class="mu-status__label">Accounts</span>
+        <span class="mu-status__value">@Model.Accounts.ToString("N0")</span>
+    </div>
+    <div class="mu-status__cell">
+        <span class="mu-status__label">Characters</span>
+        <span class="mu-status__value">@Model.Characters.ToString("N0")</span>
     </div>
     <div class="mu-status__cell">
         <span class="mu-status__label">Version</span>
@@ -22,18 +31,60 @@
     </div>
 </div>
 
-<div class="mu-panel">
-    <div class="mu-panel__head"><h2 class="mu-panel__title">Build status</h2></div>
-    <div class="mu-panel__body">
-        <p>Phase 0 is in place: database roles, column-level grants, the schema contract and the theme.
-           Rankings, registration and the admin area arrive in phases 1 to 3.</p>
-        @if (!Model.SchemaHealthy)
-        {
-            <div class="mu-notice mu-notice--danger">
-                The schema contract is failing. Check <span class="mu-mono">/healthz/schema</span> on the
-                internal port. After a <span class="mu-mono">-reinit</span>, re-run
-                <span class="mu-mono">website/db/01b-grants.sql</span>.
-            </div>
-        }
+@if (!Model.SchemaHealthy)
+{
+    <div class="mu-notice mu-notice--danger">
+        Some pages are temporarily unavailable while the server is being maintained.
+    </div>
+}
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Getting started</h2></div>
+        <div class="mu-panel__body">
+            <ol style="margin:0;padding-left:1.2em">
+                <li>Create an account here.</li>
+                <li>Download the client and point the launcher at <span class="mu-mono">@Model.ConnectHost</span>.</li>
+                <li>Make a character and pick a server from the list.</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">Top players</h2>
+            <span class="mu-panel__aside">updated @Model.Age</span>
+        </div>
+        <div class="mu-panel__body">
+            @if (Model.Top.Count == 0)
+            {
+                <div class="mu-empty">
+                    <div class="mu-empty__title">No characters yet</div>
+                    Be the first &mdash; the board fills up as people play.
+                </div>
+            }
+            else
+            {
+                <div class="mu-tablewrap">
+                    <table class="mu-table">
+                        <thead><tr><th>#</th><th>Character</th><th>Class</th><th class="mu-table__num">Level</th></tr></thead>
+                        <tbody>
+                        @{ var rank = 0; }
+                        @foreach (var row in Model.Top)
+                        {
+                            rank++;
+                            <tr>
+                                <td class="mu-rank @(rank <= 3 ? $"mu-rank--{rank}" : null)">@rank</td>
+                                <td><a href="/character/@Uri.EscapeDataString(row.Name)">@row.Name</a></td>
+                                <td>@(row.Class ?? "—")</td>
+                                <td class="mu-table__num">@row.Level</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mu-hint" style="margin-bottom:0"><a href="/rankings/level">See the full rankings</a></p>
+            }
+        </div>
     </div>
 </div>

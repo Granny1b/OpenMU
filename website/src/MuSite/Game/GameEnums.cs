@@ -1,10 +1,11 @@
 namespace MuSite.Game;
 
 /// <summary>
-/// Values copied from the OpenMU data model. They are persisted as integers, so they are part of
-/// the on-disk contract; the citations are where to look when something stops matching.
+/// Values copied from the OpenMU data model. Public so the test project can pin them - they are
+/// persisted as integers and so are part of the on-disk contract, and a wrong constant here means a
+/// wrong badge or a missed ban. The citations are where to look when something stops matching.
 /// </summary>
-internal static class GameEnums
+public static class GameEnums
 {
     /// <summary>
     /// AccountState - src/DataModel/Entities/Account.cs:14. Implicit numbering, persisted as integer

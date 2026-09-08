@@ -64,7 +64,55 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
+      - name: Prepare the stand-in game database
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE openmu_ci"
+          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f tests/MuSite.Tests/StandInSchema.sql
+
+      # Turns the column-level grants into a permanent regression gate: without this, a later edit
+      # could widen mu_web_read to the whole Account row and nothing would notice.
+      - name: Grants deny what they must deny
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 \
+               -v read_pw=ci -v auth_pw=ci -v reg_pw=ci -v app_pw=ci -v own_pw=ci \
+               -f db/01-roles.sql
+          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f db/01b-grants.sql
+
+          deny() {
+            if PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_ci -tAc "$2" >/dev/null 2>&1; then
+              echo "::error::$1 was ALLOWED to run: $2"
+              exit 1
+            fi
+            echo "denied as expected: $1 -- $2"
+          }
+          allow() {
+            if ! PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_ci -tAc "$2" >/dev/null 2>&1; then
+              echo "::error::$1 was DENIED but must be allowed: $2"
+              exit 1
+            fi
+            echo "allowed as expected: $1 -- $2"
+          }
+
+          deny  mu_web_read 'SELECT * FROM data."Account" LIMIT 1'
+          deny  mu_web_read 'SELECT "PasswordHash" FROM data."Account" LIMIT 1'
+          deny  mu_web_read 'SELECT "EMail" FROM data."Account" LIMIT 1'
+          deny  mu_web_read 'SELECT "LoginName" FROM data."Account" LIMIT 1'
+          deny  mu_web_reg  'SELECT "PasswordHash" FROM data."Account" LIMIT 1'
+          deny  mu_web_read 'DELETE FROM data."Character"'
+          deny  mu_web_auth 'DELETE FROM data."Account"'
+          deny  mu_web_reg  'DELETE FROM data."Account"'
+          deny  mu_web_auth 'UPDATE data."Account" SET "State" = 4'
+          allow mu_web_read 'SELECT count(*) FROM data."Character"'
+          allow mu_web_auth 'SELECT count("PasswordHash") FROM data."Account"'
+          allow mu_web_reg  'SELECT count("EMail") FROM data."Account"'
+
       - name: Test
+        env:
+          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu_ci"
         run: dotnet test --no-build -c Release --verbosity normal
 
       - name: Site schema applies cleanly and is idempotent
