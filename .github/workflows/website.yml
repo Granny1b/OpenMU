@@ -39,12 +39,19 @@ jobs:
 
       # The website must never reference OpenMU source: that reference is what would turn a
       # `docker compose pull` upgrade into a fork merge.
+      # Parsed as XML, not grepped: ElementTree skips comments, and the csproj carries a comment
+      # explaining that there is deliberately no ProjectReference - which a plain grep matches,
+      # failing the build on the very text that documents the rule.
       - name: No ProjectReference into the server tree
         run: |
-          if grep -q 'ProjectReference' src/MuSite/MuSite.csproj; then
-            echo "::error::src/MuSite/MuSite.csproj must not reference any project."
-            exit 1
-          fi
+          python3 - <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          refs = [e.get('Include') for e in ET.parse('src/MuSite/MuSite.csproj').getroot().iter('ProjectReference')]
+          if refs:
+              print(f"::error::src/MuSite/MuSite.csproj must not reference any project. Found: {refs}")
+              sys.exit(1)
+          print('ok: the website references no project in the OpenMU solution')
+          EOF
 
       # The two package files must agree on BCrypt, or a password hashed by the site may not verify
       # in the game - an account that is created and can never log in, with no error anywhere.
