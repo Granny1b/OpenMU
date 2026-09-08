@@ -1,0 +1,23 @@
+@page "/status"
+@model MuSite.Pages.StatusModel
+@{
+    ViewData["Title"] = Model.Heading;
+}
+
+<div class="mu-panel">
+    <div class="mu-panel__head"><h2 class="mu-panel__title">@Model.Heading</h2></div>
+    <div class="mu-panel__body">
+        <p>@Model.Explanation</p>
+        @if (Model.NextStep is { Length: > 0 } next)
+        {
+            <p class="mu-hint">@next</p>
+        }
+        <p style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0">
+            <a class="mu-btn" href="/">Back to the front page</a>
+            @if (Model.Code == 404)
+            {
+                <a class="mu-btn" href="/rankings/level">Browse the rankings</a>
+            }
+        </p>
+    </div>
+</div>

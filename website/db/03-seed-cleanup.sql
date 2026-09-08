@@ -15,6 +15,11 @@
 --
 -- DELETE cascades: FK_Character_Account_AccountId is ON DELETE CASCADE
 -- (Migrations/00000000000000_Initial.cs:1116), so an account's characters go with it.
+--
+-- RUN 03-seed-cleanup-dryrun.sql FIRST on any server that has real players. The SELECT below is
+-- inside the same transaction as the DELETE, so its output reaches you only after the delete has
+-- committed - it is a record, not a confirmation prompt. The `^test[0-9]+$` pattern would also
+-- match a real account registered as "test42".
 
 \set ON_ERROR_STOP on
 

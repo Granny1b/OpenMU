@@ -14,7 +14,15 @@ services:
     image: munique/openmu
     container_name: openmu-startup
     ports:
-      - "8080"
+      # No "8080" entry. A bare port with no host mapping does not mean "unpublished" - Docker binds
+      # it to a RANDOM host port on 0.0.0.0, so the admin panel was reachable from the internet on a
+      # port that changed every restart, over plain HTTP. Nothing needs it published: nginx reaches
+      # the panel as openmu-startup:8080 over the compose network and serves it on the "admin."
+      # hostname. This is the same reason the database service publishes nothing.
+      #
+      # For local development docker-compose.override.yml maps 8081:8080. On a server with no domain
+      # yet, docker-compose.panel-loopback.yml publishes nginx's 8081 on the host loopback for an
+      # SSH tunnel.
       - "55901:55901"
       - "55902:55902"
       - "55903:55903"
@@ -82,7 +90,9 @@ services:
   #   docker compose run --rm mu-site-migrate
   mu-site-migrate:
     image: mu-site-migrate
-    container_name: mu-site-migrate
+    # No container_name: this service only ever runs via `docker compose run --rm`, and a fixed name
+    # is one a crashed run can leave behind to block the next one. Compose names one-off containers
+    # itself.
     build:
       context: ../../website
       dockerfile: Dockerfile.migrate

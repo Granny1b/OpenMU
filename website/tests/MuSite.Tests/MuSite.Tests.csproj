@@ -5,12 +5,23 @@
     <RootNamespace>MuSite.Tests</RootNamespace>
   </PropertyGroup>
 
+  <!-- AuthorizationPolicyTests builds a real service provider and resolves the policies exactly as
+       the middleware does. That needs the ASP.NET Core framework assemblies; stating the reference
+       here rather than relying on it flowing transitively from MuSite makes the dependency visible
+       and survives that project ever ceasing to be a web project. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="BCrypt.Net-Next" />
     <PackageReference Include="Npgsql" />
+    <!-- SiteQueriesTests registers the type handler and materialises records directly. Dapper does
+         arrive transitively through MuSite, but a test that names a package should reference it. -->
+    <PackageReference Include="Dapper" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Xunit.SkippableFact" />

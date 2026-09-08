@@ -1,0 +1,27 @@
+# Reaches the OpenMU admin panel on a server that has no domain name yet.
+#
+# Once the website takes port 80, the panel is only served on the "admin." hostname - and on a box
+# you reach by IP there is no such hostname to type. This file publishes nginx's port 8081, which
+# nginx.dev.conf already serves the panel on, bound to the HOST LOOPBACK so nothing outside the
+# machine can connect. You then tunnel to it over the SSH session you already have:
+#
+#   ssh -L 8081:127.0.0.1:8081 you@your-server
+#
+# and open http://localhost:8081/ in your own browser.
+#
+# Append it LAST so its mapping is added to whatever the earlier files set:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.panel-loopback.yml docker compose up -d
+#
+# Pairs with the DEFAULT nginx config (nginx.dev.conf), which is what you are running before you
+# have a domain. It is not for docker-compose.prod.yml: that serves the panel on
+# admin.<your-domain> over HTTPS, and the prod configs carry no 8081 listener for this to reach.
+#
+# Delete it from the chain once "admin.<your-domain>" works over HTTPS. Do NOT change 127.0.0.1 to
+# 0.0.0.0: that publishes the panel to the internet over plain HTTP, and the panel can edit every
+# account on the server.
+services:
+
+  nginx-80:
+    ports:
+      - "127.0.0.1:8081:8081"
