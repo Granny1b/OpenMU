@@ -107,6 +107,35 @@ The website answers on [http://localhost/](http://localhost/) and the admin pane
 [http://admin.localhost/](http://admin.localhost/) — current browsers resolve `*.localhost` to the
 loopback address without any `/etc/hosts` entry.
 
+## Reaching the admin panel on a server with no domain yet
+
+`admin.localhost` only works on the machine running Docker: your browser resolves it to **your own**
+loopback address, not the server's. On a server you reach by IP address there is no hostname that
+gets you to the panel, and the website now occupies port 80.
+
+The panel is not published on a port of its own either, deliberately — see the comment on
+`openmu-startup.ports` in `docker-compose.yml`. Publishing it would put an administrative interface
+on the public internet over plain HTTP.
+
+Instead, publish it on the server's **loopback** and tunnel to it over SSH:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.panel-loopback.yml docker compose up -d
+```
+
+Then, from your own machine:
+
+```bash
+ssh -L 8081:127.0.0.1:8081 you@your-server
+```
+
+and open [http://localhost:8081/](http://localhost:8081/) while that SSH session is open. Nothing is
+exposed: `127.0.0.1:8081` on the server accepts connections only from the server itself, and the
+tunnel arrives from inside.
+
+Set `COMPOSE_FILE` in your shell profile or in `.env` so every later `docker compose` command in
+this guide picks it up. Drop the file from the chain once `admin.<your-domain>` works over HTTPS.
+
 ## Option B — with HTTPS
 
 The admin panel occupies `/` and cannot be moved to a sub-path, so the two get separate hostnames:
