@@ -7,6 +7,11 @@ services:
   database:
     restart: "unless-stopped"
 
+  mu-site:
+    restart: "unless-stopped"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
   nginx-80:
     restart: "unless-stopped"
     environment:
@@ -14,7 +19,8 @@ services:
     volumes:
       - ./nginx/nginx.prod80.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/www:/var/www/certbot/:ro
-      - ./nginx/templates/nginx.server_name.conf.template:/etc/nginx/templates/nginx.server_name.conf.template:ro
+      - ./nginx/templates/nginx.site_server_name.conf.template:/etc/nginx/templates/nginx.site_server_name.conf.template:ro
+      - ./nginx/templates/nginx.admin_server_name.conf.template:/etc/nginx/templates/nginx.admin_server_name.conf.template:ro
 
 # We add another nginx here, just for HTTPs.
 # The reason is, that it's not starting when we combine port 80 and 443 until
@@ -32,10 +38,12 @@ services:
     volumes:
       - ./nginx/nginx.prod443.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/conf/:/etc/nginx/ssl/:ro
-      - ./nginx/templates/nginx.server_name.conf.template:/etc/nginx/templates/nginx.server_name.conf.template:ro
+      - ./nginx/templates/nginx.site_server_name.conf.template:/etc/nginx/templates/nginx.site_server_name.conf.template:ro
+      - ./nginx/templates/nginx.admin_server_name.conf.template:/etc/nginx/templates/nginx.admin_server_name.conf.template:ro
       - ./nginx/templates/nginx.prod.certificates.conf.template:/etc/nginx/templates/nginx.prod.certificates.conf.template:ro
     depends_on:
       - openmu-startup
+      - mu-site
 
   certbot:
     image: certbot/certbot:latest

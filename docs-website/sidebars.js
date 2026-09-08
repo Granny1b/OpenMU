@@ -29,6 +29,7 @@ const sidebars = {
         'deployment/all-in-one',
         'deployment/all-in-one-traefik',
         'deployment/distributed',
+        'deployment/website',
         'deployment/startup-parameters',
       ],
     },

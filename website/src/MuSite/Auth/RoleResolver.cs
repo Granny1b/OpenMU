@@ -56,7 +56,12 @@ public sealed class RoleResolver(IOptionsMonitor<SiteOptions> options)
         // Ordinal, not OrdinalIgnoreCase: data."Account"."LoginName" carries a case-sensitive unique
         // index, so 'Owner' and 'owner' can be two different accounts. Matching loosely here would
         // hand the allowlist entry to whichever of them registered the case variant.
-        if (!current.Admins.Contains(loginName, StringComparer.Ordinal))
+        // Empty entries are filtered: the compose file sets MUSITE_ADMINS__0 and __1 unconditionally,
+        // so an unconfigured slot arrives as "". It could never match a real login name, but an
+        // allowlist that silently contains a blank is the kind of thing that gets "simplified" into
+        // a real hole later.
+        var allowed = current.Admins.Where(name => !string.IsNullOrWhiteSpace(name));
+        if (!allowed.Contains(loginName, StringComparer.Ordinal))
         {
             return SiteRole.None;
         }

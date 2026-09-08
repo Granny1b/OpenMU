@@ -96,6 +96,18 @@ public class RoleResolverTests
     }
 
     [Fact]
+    public void BlankAllowlistEntriesNeverMatch()
+    {
+        // The compose file sets MUSITE_ADMINS__0 and __1 unconditionally, so an unconfigured slot
+        // arrives as an empty string.
+        var resolver = Build(admins: ["", "  ", "boss"], owner: "boss");
+
+        Assert.Equal(SiteRole.Owner, resolver.Resolve("boss", GameMaster));
+        Assert.Equal(SiteRole.None, resolver.Resolve("", GameMaster));
+        Assert.Equal(SiteRole.None, resolver.Resolve("  ", GameMaster));
+    }
+
+    [Fact]
     public void AdminIsNotOwner()
     {
         var resolver = Build(admins: ["boss", "helper"], owner: "boss");
