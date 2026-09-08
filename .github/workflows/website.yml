@@ -22,7 +22,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: openmu_web_ci
+          # The databases this workflow uses are created explicitly below, with production names.
+          POSTGRES_DB: postgres
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -71,14 +72,18 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
+      # The databases are named exactly as they are in production - openmu and openmu_web - because
+      # db/01-roles.sql names them: it grants CONNECT ON DATABASE openmu and creates openmu_web.
+      # Running these files against differently named databases tests something that will never be
+      # deployed, and CI found that out the hard way.
       - name: Prepare the stand-in game database
         env:
           PGPASSWORD: ci
         run: |
-          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE openmu_ci"
-          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f tests/MuSite.Tests/StandInSchema.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE openmu"
+          psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 -f tests/MuSite.Tests/StandInSchema.sql
           # Also exercises the DO block that decides whether ux_account_loginname_lower can be created.
-          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f db/02-indexes.sql
+          psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 -f db/02-indexes.sql
 
       # Turns the column-level grants into a permanent regression gate: without this, a later edit
       # could widen mu_web_read to the whole Account row and nothing would notice.
@@ -86,20 +91,22 @@ jobs:
         env:
           PGPASSWORD: ci
         run: |
-          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 \
+          # 01-roles.sql also creates the openmu_web database, so it must run before the site
+          # schema step below.
+          psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 \
                -v read_pw=ci -v auth_pw=ci -v reg_pw=ci -v app_pw=ci -v own_pw=ci \
                -f db/01-roles.sql
-          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f db/01b-grants.sql
+          psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 -f db/01b-grants.sql
 
           deny() {
-            if PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_ci -tAc "$2" >/dev/null 2>&1; then
+            if PGPASSWORD=ci psql -h localhost -U "$1" -d openmu -tAc "$2" >/dev/null 2>&1; then
               echo "::error::$1 was ALLOWED to run: $2"
               exit 1
             fi
             echo "denied as expected: $1 -- $2"
           }
           allow() {
-            if ! PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_ci -tAc "$2" >/dev/null 2>&1; then
+            if ! PGPASSWORD=ci psql -h localhost -U "$1" -d openmu -tAc "$2" >/dev/null 2>&1; then
               echo "::error::$1 was DENIED but must be allowed: $2"
               exit 1
             fi
@@ -121,17 +128,40 @@ jobs:
 
       - name: Test
         env:
-          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu_ci"
+          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
         run: dotnet test --no-build -c Release --verbosity normal
 
+      # Applied as mu_web_own, which owns openmu_web - the same role the mu-site-migrate container
+      # uses. Twice, because every migration file has to be re-runnable.
       - name: Site schema applies cleanly and is idempotent
         env:
           PGPASSWORD: ci
         run: |
-          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 \
-               -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='mu_web_app') THEN CREATE ROLE mu_web_app LOGIN PASSWORD 'ci'; END IF; END \$\$;"
-          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 -f db/web/001_init.sql
-          psql -h localhost -U postgres -d openmu_web_ci -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+          psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+          psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+
+      # 001_init.sql claims audit_log is append-only because mu_web_app does not own it. That claim
+      # is a comment until something checks it. The INSERT is asserted too: without it, a table the
+      # role cannot reach at all would report every destructive statement as correctly denied.
+      - name: Audit log is append-only
+        env:
+          PGPASSWORD: ci
+        run: |
+          app() { psql -h localhost -U mu_web_app -d openmu_web -tAc "$1" >/dev/null 2>&1; }
+
+          app "INSERT INTO audit_log (actor, action, target_name, detail) VALUES ('ci','ci.boundary','ci','')" \
+            || { echo "::error::mu_web_app cannot INSERT into audit_log - the rest of this step proves nothing"; exit 1; }
+          app "SELECT count(*) FROM audit_log" \
+            || { echo "::error::mu_web_app cannot SELECT from audit_log"; exit 1; }
+          echo "INSERT and SELECT allowed as expected"
+
+          for statement in "DELETE FROM audit_log" "UPDATE audit_log SET actor = 'x'" "TRUNCATE audit_log"; do
+            if app "$statement"; then
+              echo "::error::mu_web_app was ALLOWED to run: $statement"
+              exit 1
+            fi
+            echo "denied as expected: $statement"
+          done
 
       - name: Docker image builds
         run: docker build -t mu-site:ci .

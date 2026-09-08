@@ -16,6 +16,7 @@ namespace MuSite.Tests;
 ///
 /// Skipped when MUSITE_TEST_DB is unset.
 /// </summary>
+[Collection(DatabaseCollection.Name)]
 public sealed class RegistrationInvariantTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString = Environment.GetEnvironmentVariable("MUSITE_TEST_DB");
