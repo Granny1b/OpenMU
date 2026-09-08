@@ -1,4 +1,6 @@
 using System.Net;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -6,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using MuSite;
 using MuSite.Auth;
 using MuSite.Data;
+using MuSite.Game;
 using MuSite.Live;
 using MuSite.Services;
 
@@ -64,6 +67,14 @@ builder.Services.AddHostedService<SchemaContractService>();
 builder.Services.AddSingleton<RoleResolver>();
 builder.Services.AddSingleton<PublicQueries>();
 builder.Services.AddSingleton<RankingCache>();
+builder.Services.AddSingleton<GameAccount>();
+builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddSingleton<SessionState>();
+builder.Services.AddSingleton<SiteSettings>();
+builder.Services.AddSingleton<AuditLog>();
+builder.Services.AddSingleton<RegistrationThrottle>();
+builder.Services.AddSingleton<LoginAttempts>();
+builder.Services.AddHostedService<SessionPurgeService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
 
@@ -93,19 +104,56 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromDays(14);
         options.SlidingExpiration = true;
 
-        // Phase 2 attaches OnValidatePrincipal here: it re-reads the session row and the account
-        // State so a ban, a password change or a role change takes effect on the next request
-        // rather than in fourteen days.
+        // Re-resolve the session on EVERY request (cached 60s per session id). The cookie carries a
+        // session id and nothing else, so a ban, a sign-out elsewhere, a password change or a role
+        // change takes effect on the next request instead of whenever the cookie expires.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var claim = context.Principal?.FindFirst(SitePolicies.SessionIdClaim)?.Value;
+            if (!Guid.TryParse(claim, out var sessionId))
+            {
+                context.RejectPrincipal();
+                return;
+            }
+
+            var state = context.HttpContext.RequestServices.GetRequiredService<SessionState>();
+            var resolved = await state.ResolveAsync(sessionId, context.HttpContext.RequestAborted)
+                .ConfigureAwait(false);
+
+            if (!resolved.IsValid)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            // The role lives in a claim for the authorization policies to read, so a role that
+            // changed since sign-in has to be written back - otherwise a demoted admin keeps /admin
+            // until their cookie expires.
+            if (context.Principal?.FindFirst(SitePolicies.RoleClaim)?.Value != resolved.Role.ToString())
+            {
+                context.ReplacePrincipal(SitePrincipal.Build(resolved.AccountId, resolved.LoginName, sessionId, resolved.Role));
+                context.ShouldRenew = true;
+            }
+        };
     });
 
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(SitePolicies.Player, policy => policy.RequireAuthenticatedUser())
-    .AddPolicy(SitePolicies.Admin, policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim(SitePolicies.RoleClaim, nameof(SiteRole.Admin), nameof(SiteRole.Owner)))
-    .AddPolicy(SitePolicies.Owner, policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim(SitePolicies.RoleClaim, nameof(SiteRole.Owner)));
+// Per-IP limits. These are worth nothing unless the proxy actually forwards the client address:
+// see the ForwardedHeaders configuration above and the proxy_set_header block in
+// deploy/all-in-one/nginx/*.conf. With neither, every request on Earth shares one partition.
+builder.Services.AddRateLimiter(limiter =>
+{
+    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    limiter.AddPolicy(RateLimitPolicies.Register, context => RateLimitPartition.GetFixedWindowLimiter(
+        ClientPartition.For(context.Connection.RemoteIpAddress),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 3, Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
+
+    limiter.AddPolicy(RateLimitPolicies.Login, context => RateLimitPartition.GetFixedWindowLimiter(
+        ClientPartition.For(context.Connection.RemoteIpAddress),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
+});
 
 builder.Services.AddRazorPages(options =>
 {
@@ -147,6 +195,7 @@ app.UseStatusCodePagesWithReExecute("/not-found");
 app.UseStaticFiles();
 app.UseRouting();
 app.UseOutputCache();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapRazorPages();

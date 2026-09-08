@@ -1,0 +1,64 @@
+@page "/register"
+@model RegisterModel
+@{
+    ViewData["Title"] = "Create an account";
+}
+
+<h1>Create an account</h1>
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__body">
+            <form method="post" class="mu-form-narrow">
+                @if (Model.Error is { } error)
+                {
+                    <div class="mu-notice mu-notice--danger">@error</div>
+                }
+
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_LoginName">Account name</label>
+                    <input class="mu-input" id="Input_LoginName" name="Input.LoginName" maxlength="10"
+                           value="@Model.Input.LoginName" autocomplete="username" required />
+                    <p class="mu-hint">3 to 10 letters or digits. This is what you type into the game client,
+                       and it cannot be changed later.</p>
+                </div>
+
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_Password">Password</label>
+                    <input class="mu-input" id="Input_Password" name="Input.Password" type="password"
+                           autocomplete="new-password" required />
+                    <p class="mu-hint">Between @Model.MinPassword and @Model.MaxPassword characters.
+                       The game client cannot send more than @Model.MaxPassword.</p>
+                </div>
+
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_Confirm">Repeat password</label>
+                    <input class="mu-input" id="Input_Confirm" name="Input.Confirm" type="password"
+                           autocomplete="new-password" required />
+                </div>
+
+                <div class="mu-field">
+                    <label class="mu-label" for="Input_Email">Email <span class="mu-muted">(optional)</span></label>
+                    <input class="mu-input" id="Input_Email" name="Input.Email" type="email"
+                           value="@Model.Input.Email" autocomplete="email" />
+                    <p class="mu-hint">Only used if you ask an administrator to recover your account.</p>
+                </div>
+
+                <button class="mu-btn mu-btn--primary" type="submit">Create account</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Before you register</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-notice mu-notice--warn">
+                Your account name is permanent. Character names are chosen in the game, not here.
+            </div>
+            <p class="mu-muted" style="font-size:.87rem;margin-bottom:0">
+                One account holds up to five characters. By registering you accept the
+                <a href="/rules">rules</a> and the <a href="/privacy">privacy notice</a>.
+            </p>
+        </div>
+    </div>
+</div>

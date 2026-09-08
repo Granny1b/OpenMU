@@ -24,18 +24,35 @@ CREATE INDEX IF NOT EXISTS ix_account_loginname_lower
     ON data."Account" (lower("LoginName") text_pattern_ops);
 
 -- ---------------------------------------------------------------------------------------------
--- Case-collision check. data."Account"."LoginName" carries a plain unique btree, which is
--- CASE-SENSITIVE: 'Player' and 'player' can both exist. The site logs in with an exact `=` match,
--- the same as the game (AccountRepository), so the login path is unambiguous - but run this once
--- and record the answer before enabling the optional hardening index below.
--- ---------------------------------------------------------------------------------------------
-SELECT lower("LoginName") AS collides, count(*) AS variants
-  FROM data."Account"
- GROUP BY lower("LoginName")
-HAVING count(*) > 1;
-
--- OPTIONAL HARDENING - apply only if the query above returned zero rows.
--- It makes case-variant registrations impossible, which closes the whole class of confusion
--- between a case-insensitive lookup and a case-sensitive write. It will FAIL if collisions exist.
+-- Case-insensitive uniqueness for account names.
 --
--- CREATE UNIQUE INDEX CONCURRENTLY ux_account_loginname_lower ON data."Account" (lower("LoginName"));
+-- data."Account"."LoginName" carries a plain unique btree, which is CASE-SENSITIVE: 'Valdrenn' and
+-- 'valdrenn' can both exist, and to the game they are two unrelated accounts - a ready-made
+-- impersonation. The website refuses a name that differs from an existing one only by
+-- capitalisation, but that check and the insert are two statements: under concurrent registrations
+-- one can still slip through. Only a unique index closes the race, so this creates it.
+--
+-- It is skipped, loudly, when collisions already exist - resolve those first (rename or delete one
+-- of each pair), then re-run this file.
+-- ---------------------------------------------------------------------------------------------
+DO $$
+DECLARE
+    collisions integer;
+BEGIN
+    SELECT count(*) INTO collisions FROM (
+        SELECT lower("LoginName") FROM data."Account" GROUP BY 1 HAVING count(*) > 1
+    ) AS duplicated;
+
+    IF collisions > 0 THEN
+        RAISE WARNING
+            'ux_account_loginname_lower NOT created: % account name(s) differ only by capitalisation. '
+            'Registration remains open to a case-variant race until they are resolved. '
+            'List them with: SELECT lower("LoginName"), count(*) FROM data."Account" '
+            'GROUP BY 1 HAVING count(*) > 1;', collisions;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_account_loginname_lower
+            ON data."Account" (lower("LoginName"));
+        RAISE NOTICE 'ux_account_loginname_lower is in place.';
+    END IF;
+END
+$$;

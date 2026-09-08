@@ -33,7 +33,7 @@ cp .env.example .env && $EDITOR .env         # five DB passwords, MUSITE_ADMINS,
 psql -U postgres -d openmu -v read_pw="'...'" -v auth_pw="'...'" -v reg_pw="'...'" \
                            -v app_pw="'...'"  -v own_pw="'...'" -f db/01-roles.sql
 psql -U postgres -d openmu -f db/01b-grants.sql
-psql -U postgres -d openmu -f db/02-indexes.sql
+psql -U postgres -d openmu -f db/02-indexes.sql       # watch for the WARNING it may print
 psql -U postgres -d openmu -f db/03-seed-cleanup.sql
 
 docker compose run --rm mu-site-migrate      # creates the openmu_web schema
@@ -42,6 +42,19 @@ docker compose run --rm mu-site-migrate      # creates the openmu_web schema
 Then verify the boundaries actually hold - the commented block at the end of `db/01b-grants.sql`
 lists the four checks, and the last one is **log in with the game client**.
 
+## Account names and capitalisation
+
+OpenMU's unique index on `data."Account"."LoginName"` is **case-sensitive**, so `Valdrenn` and
+`valdrenn` are two unrelated accounts as far as the game is concerned. The website refuses a name
+that differs from an existing one only by capitalisation, but that check and the insert are two
+statements — only a unique index closes the race. `db/02-indexes.sql` creates
+`ux_account_loginname_lower` for that, and **skips it with a WARNING** if collisions already exist.
+If you see that warning, resolve the pairs it names and re-run the file; until then registration is
+open to a case-variant race.
+
+Sign-in is case-sensitive for the same reason: it matches `AccountRepository`, so an account that
+can sign in here can always sign in in the game.
+
 ## After a `-reinit`
 
 `ReCreateDatabaseAsync` calls `EnsureDeletedAsync()`, which is `DROP DATABASE openmu`. That takes
@@ -49,7 +62,7 @@ every grant and index with it, and re-seeds the twenty test accounts. Re-run, in
 
 ```sh
 psql -U postgres -d openmu -f db/01b-grants.sql
-psql -U postgres -d openmu -f db/02-indexes.sql
+psql -U postgres -d openmu -f db/02-indexes.sql       # watch for the WARNING it may print
 psql -U postgres -d openmu -f db/03-seed-cleanup.sql
 ```
 

@@ -70,6 +70,8 @@ jobs:
         run: |
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE openmu_ci"
           psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f tests/MuSite.Tests/StandInSchema.sql
+          # Also exercises the DO block that decides whether ux_account_loginname_lower can be created.
+          psql -h localhost -U postgres -d openmu_ci -v ON_ERROR_STOP=1 -f db/02-indexes.sql
 
       # Turns the column-level grants into a permanent regression gate: without this, a later edit
       # could widen mu_web_read to the whole Account row and nothing would notice.

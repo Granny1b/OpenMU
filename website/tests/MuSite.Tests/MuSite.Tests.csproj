@@ -12,6 +12,7 @@
     <PackageReference Include="BCrypt.Net-Next" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
 

@@ -1,0 +1,78 @@
+@page "/account"
+@model MuSite.Pages.Account.IndexModel
+@using MuSite.Game
+@{
+    ViewData["Title"] = "My account";
+}
+
+<h1>@Model.Overview!.LoginName</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    Registered @Model.Overview!.Registered.ToString("yyyy-MM-dd")
+    @if (GameEnums.AccountState.IsGameMaster(Model.Overview!.State))
+    {
+        <span class="mu-badge mu-badge--gm">@GameEnums.AccountState.Describe(Model.Overview!.State)</span>
+    }
+</p>
+
+@if (TempData["Notice"] is string notice)
+{
+    <div class="mu-notice mu-notice--ok">@notice</div>
+}
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Account</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-stats">
+                <div><span class="mu-stat__label">Characters</span><div class="mu-stat__value">@Model.Characters.Count</div></div>
+                <div><span class="mu-stat__label">Email</span><div class="mu-stat__value">@(string.IsNullOrEmpty(Model.Overview!.Email) ? "—" : Model.Overview!.Email)</div></div>
+            </div>
+
+            @if (Model.OtherSessions > 0)
+            {
+                <div class="mu-notice mu-notice--warn">
+                    Signed in on @Model.OtherSessions other @(Model.OtherSessions == 1 ? "device" : "devices").
+                    Changing your password signs those out.
+                </div>
+            }
+
+            <p style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0">
+                <a class="mu-btn" href="/account/password">Change password</a>
+                <a class="mu-btn" href="/logout">Sign out</a>
+            </p>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">My characters</h2></div>
+        <div class="mu-panel__body">
+            @if (Model.Characters.Count == 0)
+            {
+                <div class="mu-empty">
+                    <div class="mu-empty__title">No characters yet</div>
+                    Start the game client and create one &mdash; it will appear here.
+                </div>
+            }
+            else
+            {
+                <div class="mu-tablewrap">
+                    <table class="mu-table">
+                        <thead><tr><th>Name</th><th>Class</th><th class="mu-table__num">Level</th><th class="mu-table__num">Resets</th><th>Guild</th></tr></thead>
+                        <tbody>
+                        @foreach (var character in Model.Characters)
+                        {
+                            <tr>
+                                <td><a href="/character/@Uri.EscapeDataString(character.Name)">@character.Name</a></td>
+                                <td>@(character.Class ?? "—")</td>
+                                <td class="mu-table__num">@character.Level</td>
+                                <td class="mu-table__num">@character.Resets</td>
+                                <td>@(character.Guild ?? "—")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
