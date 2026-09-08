@@ -41,18 +41,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 1;
-    options.KnownNetworks.Clear();
+
+    // KnownIPNetworks, not KnownNetworks. There are two IPNetwork types in scope, and the obsolete
+    // KnownNetworks collection holds Microsoft.AspNetCore.HttpOverrides.IPNetwork while
+    // System.Net.IPNetwork.TryParse below produces the framework one - mixing them is a compile
+    // error, not a silent mismatch. KnownIPNetworks takes System.Net.IPNetwork and is the
+    // replacement the ASPDEPR005 deprecation points at.
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 
     var trusted = builder.Configuration.GetSection("TrustedNetworks").Get<string[]>() ?? [];
     foreach (var entry in trusted)
     {
-        // Fully qualified: Microsoft.AspNetCore.HttpOverrides also defines an IPNetwork, so the bare
-        // name is ambiguous with both namespaces in scope.
         if (entry.Contains('/', StringComparison.Ordinal)
             && System.Net.IPNetwork.TryParse(entry, out var network))
         {
-            options.KnownNetworks.Add(network);
+            options.KnownIPNetworks.Add(network);
         }
         else if (IPAddress.TryParse(entry, out var single))
         {
