@@ -90,7 +90,9 @@ services:
   #   docker compose run --rm mu-site-migrate
   mu-site-migrate:
     image: mu-site-migrate
-    container_name: mu-site-migrate
+    # No container_name: this service only ever runs via `docker compose run --rm`, and a fixed name
+    # is one a crashed run can leave behind to block the next one. Compose names one-off containers
+    # itself.
     build:
       context: ../../website
       dockerfile: Dockerfile.migrate
