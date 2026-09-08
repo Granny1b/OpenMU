@@ -8,6 +8,7 @@ namespace MuSite.Pages;
 
 public sealed class IndexModel(
     RankingCache cache,
+    NewsStore news,
     SchemaContract contract,
     ServerProbe probe,
     IOptions<SiteOptions> options,
@@ -29,6 +30,8 @@ public sealed class IndexModel(
 
     public IReadOnlyList<RankingRow> Top { get; private set; } = [];
 
+    public IReadOnlyList<NewsItem> News { get; private set; } = [];
+
     public string Age { get; private set; } = "just now";
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
@@ -44,6 +47,8 @@ public sealed class IndexModel(
             var top = await cache.GetRankingAsync(RankingBoard.Level, 0, 5, null, cancellationToken).ConfigureAwait(false);
             this.Top = top.Value;
             this.Age = top.Age;
+
+            this.News = await news.GetPublishedAsync(3, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

@@ -85,6 +85,40 @@ to `State = 2` and thereby mint website administrators. See `src/MuSite/Auth/Rol
 
 An empty `MUSITE_ADMINS` means zero admins and `/admin` 404s for everybody. Fail closed.
 
+### What an administrator can and cannot do
+
+Every admin route is `/admin/accounts/{id:guid}` and every write is keyed to that **id**. Never a
+login name: the search matches names case-insensitively while OpenMU's unique index is
+case-sensitive, so a guard and a write that resolve a name differently would clear one account and
+modify another.
+
+| | |
+|---|---|
+| Ban / unban | Admin and Owner |
+| Reset a password | **Owner only** — it hands somebody's account to whoever is looking at the screen |
+| Act on another administrator | **Owner only** |
+| Act on the Owner | nobody |
+
+Banning and resetting re-ask the acting administrator for **their own game password**, verified
+against the same hash the game checks. The session cookie proves who signed in — possibly a
+fortnight ago, on a laptop now sitting unlocked.
+
+The lever for a rogue administrator is removing them from `MUSITE_ADMINS`, which lives in
+configuration rather than in a form anyone can post to.
+
+### What a ban actually does
+
+It writes `data."Account"."State"` and ends the account's website sessions immediately. It **cannot
+disconnect a player who is already in the game** — `ChatCommandPlugInBase` disconnects before
+writing the state, and the website can only do the write, so an in-game ban takes hold at the next
+login.
+
+`data."Account"` has no ban-expiry column, so a temporary ban's expiry lives in the site's own
+`web_ban` table and is lifted by a background job. **If the site container is down, temporary bans
+do not expire.** Unbanning restores the state recorded when the ban was placed, so a banned game
+master does not quietly come back as an ordinary player, and the expiry job leaves the account alone
+if someone has since made the ban permanent.
+
 ## Tests
 
 ```sh

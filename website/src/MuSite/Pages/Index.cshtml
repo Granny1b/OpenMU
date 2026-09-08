@@ -40,13 +40,32 @@
 
 <div class="mu-grid2">
     <div class="mu-panel">
-        <div class="mu-panel__head"><h2 class="mu-panel__title">Getting started</h2></div>
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">@(Model.News.Count > 0 ? "Announcements" : "Getting started")</h2>
+            @if (Model.News.Count > 0)
+            {
+                <span class="mu-panel__aside"><a href="/news">All</a></span>
+            }
+        </div>
         <div class="mu-panel__body">
-            <ol style="margin:0;padding-left:1.2em">
-                <li>Create an account here.</li>
-                <li>Download the client and point the launcher at <span class="mu-mono">@Model.ConnectHost</span>.</li>
-                <li>Make a character and pick a server from the list.</li>
-            </ol>
+            @if (Model.News.Count > 0)
+            {
+                foreach (var post in Model.News)
+                {
+                    <h3 style="margin-bottom:2px"><a href="/news/@post.Slug">@post.Title</a></h3>
+                    <p class="mu-muted" style="margin:0 0 12px;font-size:.85rem">
+                        @post.PublishedAt?.ToString("yyyy-MM-dd")
+                    </p>
+                }
+            }
+            else
+            {
+                <ol style="margin:0;padding-left:1.2em">
+                    <li>Create an account here.</li>
+                    <li>Download the client and point the launcher at <span class="mu-mono">@Model.ConnectHost</span>.</li>
+                    <li>Make a character and pick a server from the list.</li>
+                </ol>
+            }
         </div>
     </div>
 

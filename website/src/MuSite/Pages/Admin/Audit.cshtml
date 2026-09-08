@@ -1,0 +1,40 @@
+@page "/admin/audit"
+@model MuSite.Pages.Admin.AuditModel
+@{
+    ViewData["Title"] = "Audit log";
+}
+
+<h1>Audit log</h1>
+
+<div class="mu-panel">
+    <div class="mu-panel__head">
+        <h2 class="mu-panel__title">Recorded actions</h2>
+        <span class="mu-panel__aside">append-only &mdash; nothing here can be edited or deleted</span>
+    </div>
+    <div class="mu-panel__body">
+        @if (Model.Entries.Count == 0)
+        {
+            <div class="mu-empty"><div class="mu-empty__title">Nothing recorded yet</div></div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+                    <tbody>
+                    @foreach (var entry in Model.Entries)
+                    {
+                        <tr>
+                            <td class="mu-muted">@entry.At.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@entry.Actor</td>
+                            <td class="mu-mono">@entry.Action</td>
+                            <td>@(entry.TargetName ?? "—")</td>
+                            <td class="mu-muted">@entry.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

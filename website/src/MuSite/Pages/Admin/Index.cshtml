@@ -1,0 +1,106 @@
+@page "/admin"
+@model MuSite.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Administration";
+}
+
+<h1>Administration</h1>
+
+@if (TempData["Notice"] is string notice)
+{
+    <div class="mu-notice mu-notice--ok">@notice</div>
+}
+
+@if (Model.SurvivingSeeds.Count > 0)
+{
+    <div class="mu-notice mu-notice--danger">
+        <strong>@Model.SurvivingSeeds.Count seeded development account(s) still exist:</strong>
+        <span class="mu-mono">@string.Join(", ", Model.SurvivingSeeds)</span>.
+        Each ships with its password equal to its login name, and <span class="mu-mono">testgm</span>,
+        <span class="mu-mono">testgm2</span> and <span class="mu-mono">testunlock</span> ship as Game Master.
+        This site refuses them, the game does not &mdash; run
+        <span class="mu-mono">website/db/03-seed-cleanup.sql</span>.
+    </div>
+}
+
+<div class="mu-status">
+    <div class="mu-status__cell"><span class="mu-status__label">Registered today</span><span class="mu-status__value">@Model.Today</span></div>
+    <div class="mu-status__cell"><span class="mu-status__label">Last 7 days</span><span class="mu-status__value">@Model.Week</span></div>
+    <div class="mu-status__cell"><span class="mu-status__label">Active bans</span><span class="mu-status__value">@Model.ActiveBans</span></div>
+    <div class="mu-status__cell"><span class="mu-status__label">Schema contract</span><span class="mu-status__value">@(Model.SchemaHealthy ? "OK" : "Failing")</span></div>
+</div>
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Find an account</h2></div>
+        <div class="mu-panel__body">
+            <form method="get" action="/admin/accounts" class="mu-field">
+                <label class="mu-label" for="q">Login name or character name</label>
+                <input class="mu-input" id="q" name="q" type="search" placeholder="prefix match" />
+            </form>
+            <p class="mu-hint" style="margin-bottom:0">
+                <a href="/admin/news">Announcements</a> &middot; <a href="/admin/audit">Audit log</a>
+            </p>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Switches</h2></div>
+        <div class="mu-panel__body">
+            <form method="post">
+                <div class="mu-field">
+                    <span class="mu-label">Registration</span>
+                    <p style="margin:0">
+                        @(Model.RegistrationOpen ? "Open" : "Closed")
+                        <button class="mu-btn mu-btn--sm" type="submit" name="toggle" value="registration">
+                            @(Model.RegistrationOpen ? "Close" : "Open")
+                        </button>
+                    </p>
+                    <p class="mu-hint">Closes by itself after @Model.DailyCap accounts in one day.</p>
+                </div>
+                <div class="mu-field" style="margin-bottom:0">
+                    <span class="mu-label">Maintenance notice</span>
+                    <p style="margin:0">
+                        @(Model.Maintenance ? "Shown" : "Hidden")
+                        <button class="mu-btn mu-btn--sm" type="submit" name="toggle" value="maintenance">
+                            @(Model.Maintenance ? "Hide" : "Show")
+                        </button>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="mu-panel">
+    <div class="mu-panel__head">
+        <h2 class="mu-panel__title">Recent actions</h2>
+        <span class="mu-panel__aside">append-only &middot; <a href="/admin/audit">all</a></span>
+    </div>
+    <div class="mu-panel__body">
+        @if (Model.Recent.Count == 0)
+        {
+            <div class="mu-empty"><div class="mu-empty__title">Nothing recorded yet</div></div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+                    <tbody>
+                    @foreach (var entry in Model.Recent)
+                    {
+                        <tr>
+                            <td class="mu-muted">@entry.At.ToString("MM-dd HH:mm")</td>
+                            <td>@entry.Actor</td>
+                            <td class="mu-mono">@entry.Action</td>
+                            <td>@(entry.TargetName ?? "—")</td>
+                            <td class="mu-muted">@entry.Detail</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

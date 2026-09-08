@@ -74,7 +74,11 @@ builder.Services.AddSingleton<SiteSettings>();
 builder.Services.AddSingleton<AuditLog>();
 builder.Services.AddSingleton<RegistrationThrottle>();
 builder.Services.AddSingleton<LoginAttempts>();
+builder.Services.AddSingleton<AdminActions>();
+builder.Services.AddSingleton<StepUp>();
+builder.Services.AddSingleton<NewsStore>();
 builder.Services.AddHostedService<SessionPurgeService>();
+builder.Services.AddHostedService<BanExpiryService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
 

@@ -1,0 +1,61 @@
+@page "/admin/news"
+@model MuSite.Pages.Admin.NewsModel
+@{
+    ViewData["Title"] = "Announcements";
+}
+
+<h1>Announcements</h1>
+
+@if (TempData["Notice"] is string notice)
+{
+    <div class="mu-notice mu-notice--ok">@notice</div>
+}
+
+<div class="mu-panel">
+    <div class="mu-panel__head">
+        <h2 class="mu-panel__title">All posts</h2>
+        <span class="mu-panel__aside"><a class="mu-btn mu-btn--sm" href="/admin/news/new">Write one</a></span>
+    </div>
+    <div class="mu-panel__body">
+        @if (Model.Posts.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">Nothing written yet</div>
+                The front page shows the three most recent published posts.
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead><tr><th>Title</th><th>State</th><th>Author</th><th>Created</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var post in Model.Posts)
+                    {
+                        <tr>
+                            <td>@post.Title</td>
+                            <td>
+                                @if (post.IsPublished)
+                                {
+                                    <span class="mu-badge mu-badge--ok">Published</span>
+                                }
+                                else
+                                {
+                                    <span class="mu-badge">Draft</span>
+                                }
+                                @if (post.IsPinned)
+                                {
+                                    <span class="mu-badge">Pinned</span>
+                                }
+                            </td>
+                            <td>@post.Author</td>
+                            <td class="mu-muted">@post.CreatedAt.ToString("yyyy-MM-dd")</td>
+                            <td><a class="mu-btn mu-btn--sm" href="/admin/news/@post.Id">Edit</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

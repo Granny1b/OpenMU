@@ -1,0 +1,164 @@
+@page "/admin/accounts/{id:guid}"
+@model MuSite.Pages.Admin.AccountModel
+@using MuSite.Auth
+@using MuSite.Game
+@{
+    var a = Model.Detail!;
+    ViewData["Title"] = a.LoginName;
+}
+
+<h1>@a.LoginName</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    @if (GameEnums.AccountState.IsBanned(a.State))
+    {
+        <span class="mu-badge mu-badge--banned">@GameEnums.AccountState.Describe(a.State)</span>
+    }
+    else if (GameEnums.AccountState.IsGameMaster(a.State))
+    {
+        <span class="mu-badge mu-badge--gm">@GameEnums.AccountState.Describe(a.State)</span>
+    }
+    registered @a.Registered.ToString("yyyy-MM-dd") &middot;
+    <span class="mu-mono">@a.AccountId</span>
+</p>
+
+@if (TempData["Notice"] is string notice)
+{
+    <div class="mu-notice mu-notice--ok">@notice</div>
+}
+@if (Model.Error is { } error)
+{
+    <div class="mu-notice mu-notice--danger">@error</div>
+}
+@if (Model.NewPassword is { } password)
+{
+    <div class="mu-notice mu-notice--warn">
+        New password for <strong>@a.LoginName</strong>:
+        <span class="mu-mono" style="font-size:1.1em">@password</span><br />
+        This is shown once and is not stored anywhere in readable form. Hand it over now.
+    </div>
+}
+
+<div class="mu-grid2">
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Account</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-stats">
+                <div><span class="mu-stat__label">Email</span><div class="mu-stat__value">@(string.IsNullOrEmpty(a.Email) ? "—" : a.Email)</div></div>
+                <div><span class="mu-stat__label">Characters</span><div class="mu-stat__value">@a.Characters.Count</div></div>
+            </div>
+
+            @if (a.Characters.Count > 0)
+            {
+                <div class="mu-tablewrap">
+                    <table class="mu-table">
+                        <thead><tr><th>Name</th><th>Class</th><th class="mu-table__num">Level</th><th class="mu-table__num">Resets</th></tr></thead>
+                        <tbody>
+                        @foreach (var character in a.Characters)
+                        {
+                            <tr>
+                                <td><a href="/character/@Uri.EscapeDataString(character.Name)">@character.Name</a></td>
+                                <td>@(character.Class ?? "—")</td>
+                                <td class="mu-table__num">@character.Level</td>
+                                <td class="mu-table__num">@character.Resets</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Actions</h2></div>
+        <div class="mu-panel__body">
+            @if (Model.IsProtected)
+            {
+                <div class="mu-notice mu-notice--warn">
+                    This account is @(Model.TargetRole == SiteRole.Owner ? "the owner" : "an administrator")
+                    and cannot be acted on here. Remove it from <span class="mu-mono">MUSITE_ADMINS</span>
+                    first &mdash; that lives in configuration, not in a form.
+                </div>
+            }
+            else
+            {
+                <p class="mu-hint">
+                    A ban here takes effect at the player&rsquo;s next login. It signs them out of this
+                    site at once, but cannot disconnect them from the game.
+                </p>
+
+                <form method="post">
+                    @if (GameEnums.AccountState.IsBanned(a.State))
+                    {
+                        <div class="mu-field">
+                            <label class="mu-label" for="Confirm">Your own password</label>
+                            <input class="mu-input" id="Confirm" name="Confirm" type="password"
+                                   autocomplete="current-password" required />
+                        </div>
+                        <button class="mu-btn" type="submit" asp-page-handler="Unban">Lift the ban</button>
+                    }
+                    else
+                    {
+                        <div class="mu-field">
+                            <label class="mu-label" for="Reason">Reason</label>
+                            <input class="mu-input" id="Reason" name="Reason" maxlength="200" required />
+                        </div>
+                        <div class="mu-field">
+                            <label class="mu-label" for="Days">Days <span class="mu-muted">(blank = permanent)</span></label>
+                            <input class="mu-input" id="Days" name="Days" type="number" min="1" max="3650" />
+                        </div>
+                        <div class="mu-field">
+                            <label class="mu-label" for="Confirm">Your own password</label>
+                            <input class="mu-input" id="Confirm" name="Confirm" type="password"
+                                   autocomplete="current-password" required />
+                        </div>
+                        <button class="mu-btn mu-btn--danger" type="submit" asp-page-handler="Ban">Ban this account</button>
+                    }
+                </form>
+
+                @if (Model.CanResetPassword)
+                {
+                    <hr style="border:0;border-top:1px solid var(--mu-border);margin:16px 0" />
+                    <form method="post">
+                        <div class="mu-field">
+                            <label class="mu-label" for="ResetConfirm">Your own password</label>
+                            <input class="mu-input" id="ResetConfirm" name="Confirm" type="password"
+                                   autocomplete="current-password" required />
+                        </div>
+                        <button class="mu-btn mu-btn--danger" type="submit" asp-page-handler="Reset">
+                            Reset this account&rsquo;s password
+                        </button>
+                        <p class="mu-hint">Owner only. Signs the account out everywhere.</p>
+                    </form>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@if (Model.Bans.Count > 0)
+{
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Ban history</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead><tr><th>Placed</th><th>By</th><th>Until</th><th>Lifted</th><th>Restores to</th><th>Reason</th></tr></thead>
+                    <tbody>
+                    @foreach (var ban in Model.Bans)
+                    {
+                        <tr>
+                            <td class="mu-muted">@ban.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@ban.Actor</td>
+                            <td>@(ban.ExpiresAt?.ToString("yyyy-MM-dd HH:mm") ?? "permanent")</td>
+                            <td>@(ban.LiftedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td>@GameEnums.AccountState.Describe(ban.PriorState)</td>
+                            <td class="mu-muted">@ban.Reason</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
