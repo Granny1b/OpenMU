@@ -65,6 +65,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 
+// Must run before the first query: Dapper caches a deserializer per (type, column shape) the first
+// time it materialises one, and consults the handler registry while building it.
+Dapper.SqlMapper.AddTypeHandler(new DateTimeOffsetHandler());
+
 builder.Services.AddSingleton(_ => SiteDataSources.Create(builder.Configuration));
 builder.Services.AddSingleton<SchemaContract>();
 builder.Services.AddHostedService<SchemaContractService>();
@@ -162,6 +166,13 @@ builder.Services.AddRateLimiter(limiter =>
         ClientPartition.For(context.Connection.RemoteIpAddress),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
 });
+
+// AuthorizeFolder below names these policies as STRINGS, and ASP.NET resolves the name per request
+// rather than at startup. Without this call every page under /account and /admin throws
+// "The AuthorizationPolicy named: 'Site.Player' was not found" while every public page keeps
+// serving normally. MuSite.Tests.AuthorizationPolicyTests asserts every name in SitePolicies.All
+// resolves.
+builder.Services.AddAuthorization(SitePolicies.Configure);
 
 builder.Services.AddRazorPages(options =>
 {

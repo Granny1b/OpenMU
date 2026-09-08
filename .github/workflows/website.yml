@@ -126,11 +126,6 @@ jobs:
           allow mu_web_auth 'SELECT count("PasswordHash") FROM data."Account"'
           allow mu_web_reg  'SELECT count("EMail") FROM data."Account"'
 
-      - name: Test
-        env:
-          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
-        run: dotnet test --no-build -c Release --verbosity normal
-
       # Applied as mu_web_own, which owns openmu_web - the same role the mu-site-migrate container
       # uses. Twice, because every migration file has to be re-runnable.
       - name: Site schema applies cleanly and is idempotent
@@ -139,6 +134,14 @@ jobs:
         run: |
           psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
           psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+
+      - name: Test
+        env:
+          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
+          # SiteQueriesTests covers openmu_web. Without this the suite silently SKIPS, which is how
+          # NewsItem, AuditEntry and BanRecord all shipped unable to materialise.
+          MUSITE_TEST_SITE_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu_web"
+        run: dotnet test --no-build -c Release --verbosity normal
 
       # 001_init.sql claims audit_log is append-only because mu_web_app does not own it. That claim
       # is a comment until something checks it. The INSERT is asserted too: without it, a table the
