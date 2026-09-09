@@ -84,6 +84,36 @@ internal static class StatIds
     /// <summary>Every id this file names, required or not.</summary>
     public static readonly IReadOnlyList<Guid> All = [.. Required, .. Catalogue];
 
+    // ---------------------------------------------------------------------------------------------
+    // Item option types, from src/DataModel/Configuration/Items/ItemOptionTypes.cs. The /item
+    // builder needs these to tell an item's own options apart: `ex` selects among the Excellent
+    // ones and `opt` levels the Option one, and the two are counted completely differently.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>ItemOptionTypes.Excellent - "Excellent Option".</summary>
+    public static readonly Guid ExcellentOptionType = new("6487C498-58E0-48E5-B409-35D7598313FC");
+
+    /// <summary>ItemOptionTypes.Option - the ordinary +4/+8/+12/+16 option.</summary>
+    public static readonly Guid NormalOptionType = new("F193F91E-86D7-4456-ADD8-A3667E731303");
+
+    // ---------------------------------------------------------------------------------------------
+    // The Dinorant's three options. ItemChatCommandPlugIn.AddOption treats `opt` as a THREE-BIT
+    // FIELD for an item whose skill number is 49, selecting these by target attribute - everywhere
+    // else `opt` is an option level. Naming the bits needs the attribute ids the plugin matches on.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Stats.DamageReceiveDecrement - Stats.cs:870. Dinorant bit 1.</summary>
+    public static readonly Guid DamageReceiveDecrement = new("9D9761EF-EF47-4E5C-8106-EBC555786F20");
+
+    /// <summary>Stats.MaximumAbility - Stats.cs:208. Dinorant bit 2.</summary>
+    public static readonly Guid MaximumAbility = new("466BBBBA-C1D8-45DC-8832-2EAA1130ACFD");
+
+    /// <summary>Stats.AttackSpeedAny - Stats.cs:394. Dinorant bit 4.</summary>
+    public static readonly Guid AttackSpeedAny = new("DA08473F-DF5B-444D-8651-9EDB65797922");
+
+    /// <summary>The skill number that marks an item as a Dinorant - ItemChatCommandPlugIn.cs:90.</summary>
+    public const int DinorantSkillNumber = 49;
+
     // DO NOT QUERY the Total* / calculated attributes (Stats.TotalStrength and friends). They are
     // computed at runtime by the attribute system from the Base* values plus equipment and buffs,
     // and have no row in data."StatAttribute". A query for them returns nothing, silently.

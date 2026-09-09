@@ -211,8 +211,9 @@ public sealed class GmCommandsTests
     // ---------------------------------------------------------------------------------------------
 
     private static ItemRow Definition(
-        string name = "Dragon Slayer", int maxLevel = 15, int maxSockets = 5, bool quest = false)
-        => new(0, 16, name, maxLevel, maxSockets, 118, 130, 2, 4, 50, quest, true);
+        string name = "Dragon Slayer", int maxLevel = 15, int maxSockets = 5, bool quest = false,
+        int? skillNumber = null)
+        => new(0, 16, name, maxLevel, maxSockets, 118, 130, 2, 4, 50, quest, true, skillNumber);
 
     [Fact]
     public void AnItemWithinItsLimitsHasNoProblems()
@@ -275,5 +276,79 @@ public sealed class GmCommandsTests
         var problems = GmCommands.ValidateItem(Definition(quest: true), new ItemRequest(0, 16, 0, 0, false, false, 0, 0, 1));
 
         Assert.Contains(problems, p => p.Contains("quest item", StringComparison.Ordinal));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The sharper checks, which only apply once the caller has read what the item can actually do.
+    // /item does not complain about any of these: it applies the options it recognises and silently
+    // drops the rest, so the GM gets a plainer item than they asked for and no error anywhere.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void AnExcellentBitTheItemHasNoOptionForIsRefused()
+    {
+        // The item carries options 3 to 6 - bits 4, 8, 16 and 32, which add to 60. Bit 1 is not
+        // among them, so ex=61 would quietly produce the same item as ex=60.
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 61, false, false, 0, 0, 1), excellentMask: 60);
+
+        Assert.Contains(problems, p => p.Contains("add up to 60", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EveryExcellentBitTheItemDoesHaveIsAccepted()
+    {
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 60, false, false, 0, 0, 1), excellentMask: 60);
+
+        Assert.Empty(problems);
+    }
+
+    [Fact]
+    public void ExcellentOnAnItemWithNoExcellentOptionsIsRefused()
+    {
+        var problems = GmCommands.ValidateItem(
+            Definition("Jewel of Bless", maxLevel: 0), new ItemRequest(14, 13, 0, 4, false, false, 0, 0, 1),
+            excellentMask: 0);
+
+        Assert.Contains(problems, p => p.Contains("no excellent options", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnOptionLevelTheItemDoesNotConfigureIsRefused()
+    {
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 0, false, false, 7, 0, 1), highestOptionLevel: 4);
+
+        Assert.Contains(problems, p => p.Contains("level 4", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnAncientSetTheItemDoesNotBelongToIsRefused()
+    {
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 0, false, false, 0, 2, 1), ancientDiscriminators: [1]);
+
+        Assert.Contains(problems, p => p.Contains("no ancient set 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnAncientOnAnItemInNoSetAtAllIsRefused()
+    {
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 0, false, false, 0, 1, 1), ancientDiscriminators: []);
+
+        Assert.Contains(problems, p => p.Contains("not part of any ancient set", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WhatTheItemCanDoIsOptionalAndUnknownByDefault()
+    {
+        // The catalogue is not always to hand. Without it the checks that need it must stay quiet
+        // rather than guess, or every caller that cannot supply one gets false problems.
+        var problems = GmCommands.ValidateItem(
+            Definition(), new ItemRequest(0, 16, 0, 63, false, false, 7, 2, 2));
+
+        Assert.Empty(problems);
     }
 }

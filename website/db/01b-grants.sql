@@ -80,9 +80,44 @@ GRANT SELECT ON config."MonsterSpawnArea"   TO mu_web_read;
 GRANT SELECT ON config."ItemDefinition"     TO mu_web_read;
 
 -- GameMapDefinition already grants ("Id", "Name") for the character page; the console additionally
--- needs the map number for /move and the multiplier for the map list. TerrainData - a byte[] of
--- map geometry that would be megabytes across a listing - is deliberately still excluded.
-GRANT SELECT ("Number", "ExpMultiplier") ON config."GameMapDefinition" TO mu_web_read;
+-- needs the map number to name the map a monster spawns on. TerrainData - a byte[] of map geometry
+-- that would be megabytes across a listing - is deliberately still excluded.
+--
+-- The REVOKE is for databases that ran an earlier version of this file: ExpMultiplier was granted
+-- for a maps page that no longer exists, and a grant nothing reads should not linger.
+GRANT SELECT ("Number") ON config."GameMapDefinition" TO mu_web_read;
+REVOKE SELECT ("ExpMultiplier") ON config."GameMapDefinition" FROM mu_web_read;
+
+-- The /item builder resolves what an item's own options ARE, so it can label them instead of
+-- asking a GM to work out a bit field. That is this whole chain:
+--
+--   ItemDefinition
+--     -> ItemDefinitionItemOptionDefinition -> ItemOptionDefinition -> IncreasableItemOption
+--          -> ItemOptionType        (is this an Excellent option, or an ordinary one?)
+--          -> ItemOptionOfLevel     (+4 / +8 / +12 / +16)
+--          -> PowerUpDefinition -> PowerUpDefinitionValue / AttributeRelationship
+--               -> AttributeDefinition   (what the option actually increases)
+--     -> ItemOfItemSet -> ItemSetGroup   (Hyon vs Vicious, for `anc`)
+--
+-- All of it is the configuration the server ships. None of it references a player, a character or
+-- an account, so whole-table SELECT is right here for the same reason it is above.
+GRANT SELECT ON config."ItemDefinitionItemOptionDefinition" TO mu_web_read;
+GRANT SELECT ON config."ItemOptionDefinition"               TO mu_web_read;
+GRANT SELECT ON config."IncreasableItemOption"              TO mu_web_read;
+GRANT SELECT ON config."ItemOptionType"                     TO mu_web_read;
+GRANT SELECT ON config."ItemOptionOfLevel"                  TO mu_web_read;
+GRANT SELECT ON config."PowerUpDefinition"                  TO mu_web_read;
+GRANT SELECT ON config."PowerUpDefinitionValue"             TO mu_web_read;
+GRANT SELECT ON config."AttributeRelationship"              TO mu_web_read;
+GRANT SELECT ON config."AttributeDefinition"                TO mu_web_read;
+GRANT SELECT ON config."ItemOfItemSet"                      TO mu_web_read;
+GRANT SELECT ON config."ItemSetGroup"                       TO mu_web_read;
+GRANT SELECT ON config."ItemDefinitionItemSetGroup"         TO mu_web_read;
+
+-- Skill is granted by COLUMN rather than whole-table: the builder needs exactly one fact from it -
+-- whether an item's skill number is 49, which is how ItemChatCommandPlugIn recognises a Dinorant
+-- and switches `opt` from an option level to a bit field.
+GRANT SELECT ("Id", "Number", "Name") ON config."Skill" TO mu_web_read;
 
 -- ---------------------------------------------------------------------------------------------
 -- Verification. Each of these MUST behave as annotated; run them after applying this file.

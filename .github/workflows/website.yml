@@ -126,6 +126,20 @@ jobs:
           allow mu_web_auth 'SELECT count("PasswordHash") FROM data."Account"'
           allow mu_web_reg  'SELECT count("EMail") FROM data."Account"'
 
+          # The /item builder's option chain: readable, and read-only. A grant that is missing here
+          # takes out the builder at request time, in production, with a 500.
+          allow mu_web_read 'SELECT count(*) FROM config."ItemDefinitionItemOptionDefinition"'
+          allow mu_web_read 'SELECT count(*) FROM config."IncreasableItemOption"'
+          allow mu_web_read 'SELECT count(*) FROM config."ItemOptionOfLevel"'
+          allow mu_web_read 'SELECT count(*) FROM config."PowerUpDefinitionValue"'
+          allow mu_web_read 'SELECT count(*) FROM config."AttributeRelationship"'
+          allow mu_web_read 'SELECT count(*) FROM config."ItemOfItemSet"'
+          allow mu_web_read 'SELECT count(*) FROM config."ItemSetGroup"'
+          allow mu_web_read 'SELECT "Number" FROM config."Skill" LIMIT 1'
+          deny  mu_web_read $'UPDATE config."ItemDefinition" SET "Name" = \'x\''
+          deny  mu_web_read 'DELETE FROM config."ItemOfItemSet"'
+          deny  mu_web_read 'SELECT "ExpMultiplier" FROM config."GameMapDefinition" LIMIT 1'
+
       # Applied as mu_web_own, which owns openmu_web - the same role the mu-site-migrate container
       # uses. Twice, because every migration file has to be re-runnable.
       - name: Site schema applies cleanly and is idempotent
@@ -142,6 +156,17 @@ jobs:
           # NewsItem, AuditEntry and BanRecord all shipped unable to materialise.
           MUSITE_TEST_SITE_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu_web"
         run: dotnet test --no-build -c Release --verbosity normal
+
+      # Dapper matches a record's constructor to the reader's columns by name, by ORDER and by TYPE,
+      # and rejects it at the first row when any of the three is off - never at compile time, and
+      # never on an empty result. CharacterProfile, NewsItem and ItemRow each shipped broken that
+      # way. This asks PostgreSQL what every GameCatalog query actually returns and compares it to
+      # the record; the tests above would only catch it where a fixture happens to have rows.
+      - name: Every query maps to its record
+        env:
+          MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
+          PGPASSWORD: ci
+        run: python3 tools/verify-query-mapping.py
 
       # 001_init.sql claims audit_log is append-only because mu_web_app does not own it. That claim
       # is a comment until something checks it. The INSERT is asserted too: without it, a table the

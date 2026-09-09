@@ -192,46 +192,144 @@ public sealed class GameCatalogTests : IAsyncLifetime
         Assert.Null(await this._catalog.ItemAsync(99, 999, default));
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Item options. These are what let the /item builder say "+7 Attack Speed Any" instead of
+    // asking a GM what bit 4 of ex means, so getting them wrong is worse than not having them.
+    // ---------------------------------------------------------------------------------------------
+
     [SkippableFact]
-    public async Task MapsCarryTheirNumberAndSpawnCount()
+    public async Task AnItemsExcellentOptionsCarryTheBitThatSelectsThem()
     {
         Skip.IfNot(Enabled);
 
-        var maps = await this._catalog.MapsAsync(default);
+        var options = await this._catalog.ItemExcellentOptionsAsync(0, 16, default);
 
-        var tarkan = maps.Single(m => m.Number == 8);
-        Assert.Equal("Tarkan", tarkan.Name);
-        Assert.Equal(2, tarkan.SpawnAreas);
+        // 1 << (Number - 1), which is what AddExcellentOptions masks `ex` against.
+        Assert.Equal([3, 4, 5, 6], options.Select(o => o.Number));
+        Assert.Equal([4, 8, 16, 32], options.Select(o => o.BitValue));
 
-        var icarus = maps.Single(m => m.Number == 10);
-        Assert.Equal(1.5, icarus.ExpMultiplier);
-        Assert.Equal(1, icarus.SpawnAreas);
+        var attackSpeed = options.Single(o => o.Number == 3);
+        Assert.Equal("Attack Speed Any", attackSpeed.Attribute);
+        Assert.Equal(7m, attackSpeed.Value);
+        Assert.Equal(0, attackSpeed.AggregateType);
+        Assert.Null(attackSpeed.ScalesWith);
     }
 
     [SkippableFact]
-    public async Task WhatSpawnsOnAMapIsCountedPerMapNotOverall()
+    public async Task AnExcellentOptionWithNoConstantReportsWhatItScalesWith()
     {
         Skip.IfNot(Enabled);
 
-        // Golden Tantallos has two spawn areas in total but only ONE of them is on Tarkan. The map
-        // view must count the areas on THIS map, or every boss would look twice as common as it is.
-        var onTarkan = await this._catalog.MonstersOnMapAsync(8, default);
+        // Option 5 of every excellent set is a relationship, not a constant: its stored value is 0
+        // and a page printing only that would say "+0 Physical Base Dmg", which is a lie.
+        var options = await this._catalog.ItemExcellentOptionsAsync(0, 16, default);
 
-        Assert.Equal(2, onTarkan.Count);
-
-        var golden = onTarkan.Single(m => m.Number == 78);
-        Assert.Equal(1, golden.SpawnAreas);
-        Assert.Equal(106, golden.Level);
-
-        // Ordered by level, highest first: a GM scanning a map wants the dangerous ones on top.
-        Assert.Equal(onTarkan.OrderByDescending(m => m.Level).Select(m => m.Number), onTarkan.Select(m => m.Number));
+        var scaling = options.Single(o => o.Number == 5);
+        Assert.Equal(0m, scaling.Value);
+        Assert.Equal("Total Level", scaling.ScalesWith);
+        Assert.Equal(0.05m, scaling.ScalesWithFactor);
     }
 
     [SkippableFact]
-    public async Task AMapWithNothingOnItReturnsNothing()
+    public async Task OptionsThatAreNeitherExcellentNorOrdinaryStayOutOfBothLists()
     {
         Skip.IfNot(Enabled);
 
-        Assert.Empty(await this._catalog.MonstersOnMapAsync(999, default));
+        // The Dragon Slayer also carries a Luck option. It is applied by `lu`, not by `ex` or
+        // `opt`, so it must not appear in either list or the bits would be off by one.
+        var excellent = await this._catalog.ItemExcellentOptionsAsync(0, 16, default);
+        var levels = await this._catalog.ItemOptionLevelsAsync(0, 16, default);
+
+        Assert.DoesNotContain(excellent, o => o.Attribute == "Critical Damage Chance");
+        Assert.DoesNotContain(levels, o => o.Attribute == "Critical Damage Chance");
+    }
+
+    [SkippableFact]
+    public async Task AnOrdinaryOptionComesBackAsItsLevels()
+    {
+        Skip.IfNot(Enabled);
+
+        // Level 1 is the option's own boost; 2 upwards are ItemOptionOfLevel rows. Both branches of
+        // the UNION have to be there, or the select would offer +4 and nothing else.
+        var levels = await this._catalog.ItemOptionLevelsAsync(0, 16, default);
+
+        Assert.Equal([1, 2, 3, 4], levels.Select(l => l.Level));
+        Assert.All(levels, l => Assert.Equal("Physical Base Dmg", l.Attribute));
+        Assert.Equal([4m, 8m, 12m, 16m], levels.Select(l => l.Value));
+    }
+
+    [SkippableFact]
+    public async Task TheDinorantsThreeOptionsAreAllLevelOne()
+    {
+        Skip.IfNot(Enabled);
+
+        // Its `opt` is a bit field over these three, not a level - so all three are level 1 and the
+        // page has to tell them apart by attribute, exactly as AddOption does.
+        var levels = await this._catalog.ItemOptionLevelsAsync(13, 3, default);
+
+        // The ids are spelled out rather than read from the site's own constants: comparing the
+        // code to itself would prove nothing. These are Stats.DamageReceiveDecrement,
+        // Stats.MaximumAbility and Stats.AttackSpeedAny, which is what
+        // ItemChatCommandPlugIn.AddOption matches bits 1, 2 and 4 against.
+        Assert.Equal(3, levels.Count);
+        Assert.All(levels, l => Assert.Equal(1, l.Level));
+        Assert.Contains(levels, l => l.AttributeId == new Guid("9D9761EF-EF47-4E5C-8106-EBC555786F20"));
+        Assert.Contains(levels, l => l.AttributeId == new Guid("466BBBBA-C1D8-45DC-8832-2EAA1130ACFD"));
+        Assert.Contains(levels, l => l.AttributeId == new Guid("DA08473F-DF5B-444D-8651-9EDB65797922"));
+    }
+
+    [SkippableFact]
+    public async Task AnItemsAncientSetsAreNamedWithTheirBonusAtBothLevels()
+    {
+        Skip.IfNot(Enabled);
+
+        var sets = await this._catalog.ItemAncientSetsAsync(0, 16, default);
+
+        Assert.Equal([1, 2], sets.Select(s => s.Discriminator));
+        Assert.Equal(["Hyon Dragon", "Vicious Dragon"], sets.Select(s => s.SetName));
+
+        var hyon = sets[0];
+        Assert.Equal("Total Strength", hyon.BonusAttribute);
+        Assert.Equal(5m, hyon.BonusAtLevel1);
+        Assert.Equal(10m, hyon.BonusAtLevel2);
+        Assert.Equal(2, hyon.MinimumItemCount);
+        Assert.Equal(2, hyon.ItemsInSet);
+    }
+
+    [SkippableFact]
+    public async Task AnAncientSetTheItemIsNotLinkedToIsNotOffered()
+    {
+        Skip.IfNot(Enabled);
+
+        // The fixture gives the Dragon Slayer an ItemOfItemSet row for discriminator 3 whose group
+        // is NOT among its PossibleItemSetGroups. AddAncientBonusOption would ignore anc=3, so
+        // offering it would build a command that silently does nothing.
+        var sets = await this._catalog.ItemAncientSetsAsync(0, 16, default);
+
+        Assert.DoesNotContain(sets, s => s.Discriminator == 3);
+        Assert.DoesNotContain(sets, s => s.SetName == "Sylph Wind Set");
+    }
+
+    [SkippableFact]
+    public async Task AnItemWithNoOptionsReturnsEmptyRatherThanThrowing()
+    {
+        Skip.IfNot(Enabled);
+
+        Assert.Empty(await this._catalog.ItemExcellentOptionsAsync(14, 13, default));
+        Assert.Empty(await this._catalog.ItemOptionLevelsAsync(14, 13, default));
+        Assert.Empty(await this._catalog.ItemAncientSetsAsync(14, 13, default));
+    }
+
+    [SkippableFact]
+    public async Task AnItemsSkillNumberIsWhatMarksTheDinorant()
+    {
+        Skip.IfNot(Enabled);
+
+        var dinorant = await this._catalog.ItemAsync(13, 3, default);
+        var jewel = await this._catalog.ItemAsync(14, 13, default);
+
+        // 49 is the skill number ItemChatCommandPlugIn.cs:90 tests for.
+        Assert.Equal(49, dinorant!.SkillNumber);
+        Assert.Null(jewel!.SkillNumber);
     }
 }
