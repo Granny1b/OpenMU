@@ -6,9 +6,9 @@ name: Website
 on:
   push:
     branches: [ master, main ]
-    paths: [ 'website/**', '.github/workflows/website.yml' ]
+    paths: [ 'website/**', 'deploy/**', '.github/workflows/website.yml' ]
   pull_request:
-    paths: [ 'website/**', '.github/workflows/website.yml' ]
+    paths: [ 'website/**', 'deploy/**', '.github/workflows/website.yml' ]
 
 jobs:
   build:
@@ -197,6 +197,20 @@ jobs:
           MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
           PGPASSWORD: ci
         run: python3 tools/verify-query-mapping.py
+
+      # A duplicate mapping key is valid to PyYAML - it silently keeps the last one - and REJECTED
+      # by the Go parser Docker Compose uses. That difference shipped a compose file the server
+      # could not parse while this workflow went green, so the gate has to be compose itself.
+      # --env-file /dev/null because the real .env holds secrets and is not in the repository;
+      # unset variables are only warnings, and `config` still parses and resolves the whole file.
+      - name: Every compose file parses
+        working-directory: .
+        run: |
+          for dir in deploy/*/; do
+            [ -f "$dir/docker-compose.yml" ] || continue
+            echo "--- $dir"
+            ( cd "$dir" && docker compose --env-file /dev/null config --quiet )
+          done
 
       # The shipper's regex fails SILENTLY: a pattern that does not match does not error, it files
       # everything under level "Unparsed", and a missing log line looks exactly like nothing having
