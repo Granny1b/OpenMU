@@ -119,6 +119,51 @@ do not expire.** Unbanning restores the state recorded when the ban was placed, 
 master does not quietly come back as an ordinary player, and the expiry job leaves the account alone
 if someone has since made the ban permanent.
 
+## GM console
+
+`/admin/items`, `/admin/monsters`, `/admin/maps` and `/admin/commands` read the game's own
+configuration and compose the exact chat command to run in-game.
+
+**The site does not, and cannot, execute them.** Three independent reasons, each verified in the
+server source rather than assumed:
+
+1. A signed-in player's account, characters and inventory are loaded into an EF context created in
+   `src/GameLogic/Player.cs:98` and disposed at `:1330` — it lives for the whole session. A row
+   written behind its back is untracked, and collides with whatever that session saves.
+2. `src/LoginServer/LoginServer.cs:15` keeps connected accounts in a plain in-memory `Dictionary`.
+   Online state is never persisted, so the site cannot even tell whether a player is online in
+   order to refuse the write.
+3. There is no API. `src/Web/Shared/Services/ChatCommandController.cs` only *lists* commands, by
+   reflecting over assemblies loaded in the admin panel's own process.
+
+So `/item` drops the item next to you and the player picks it up; `/move` warps them. The console's
+job is to make sure what you paste works the first time.
+
+### The command catalogue is generated
+
+`src/MuSite/Game/GmCommands.Generated.cs` is produced from the OpenMU source by
+`tools/generate-gm-commands.py`, because the website has no `ProjectReference` into `../src` and so
+cannot reflect the commands at runtime. Re-run it after upgrading OpenMU:
+
+```bash
+python3 website/tools/generate-gm-commands.py
+```
+
+It refuses to write a catalogue with fewer than 50 commands, and `GmCommandsTests` asserts the
+shapes it must produce — two earlier versions of that generator each silently dropped arguments,
+which is worse than not having one.
+
+### Two things about argument syntax
+
+Most commands take `name=value` pairs in any order, and the short names are matched **exactly and
+case-sensitively** by `CommandExtensions.ReadNamedArgumentsAsync` — `ancBonuslvl` works,
+`ancbonuslvl` is ignored without complaint. Commands whose argument class carries no `[Argument]`
+attributes at all (the whole `/set*` and `/get*` family) are **positional only**: their values go in
+declaration order with no gaps, because the server assigns them by index.
+
+22 of the commands are `IDisabledByDefault` and answer "unknown command" until they are enabled on
+the OpenMU admin panel's Plugins page. The console flags those.
+
 ## Tests
 
 ```sh

@@ -65,6 +65,26 @@ GRANT SELECT ("Id", "GuildId", "Status")                                ON guild
 GRANT SELECT ("Id", "Name")                                             ON guild."Guild" TO mu_web_reg;
 
 -- ---------------------------------------------------------------------------------------------
+-- The GM console's reference catalogue. Pure game CONFIGURATION - monster and item definitions,
+-- spawn areas, maps. It carries no player data at all, so it goes to mu_web_read, the pool that
+-- cannot read a login name, an email or a password hash. The console pages are admin-only, but
+-- the credential they read with does not need to be.
+--
+-- Whole-table SELECT here rather than column lists: these tables ARE the public reference data
+-- that OpenMU ships, there is nothing in them to withhold, and a column list would need editing
+-- on every upstream migration that adds a field.
+-- ---------------------------------------------------------------------------------------------
+GRANT SELECT ON config."MonsterDefinition"  TO mu_web_read;
+GRANT SELECT ON config."MonsterAttribute"   TO mu_web_read;
+GRANT SELECT ON config."MonsterSpawnArea"   TO mu_web_read;
+GRANT SELECT ON config."ItemDefinition"     TO mu_web_read;
+
+-- GameMapDefinition already grants ("Id", "Name") for the character page; the console additionally
+-- needs the map number for /move and the multiplier for the map list. TerrainData - a byte[] of
+-- map geometry that would be megabytes across a listing - is deliberately still excluded.
+GRANT SELECT ("Number", "ExpMultiplier") ON config."GameMapDefinition" TO mu_web_read;
+
+-- ---------------------------------------------------------------------------------------------
 -- Verification. Each of these MUST behave as annotated; run them after applying this file.
 -- ---------------------------------------------------------------------------------------------
 --   psql -U mu_web_read -d openmu -c 'SELECT * FROM data."Account" LIMIT 1'

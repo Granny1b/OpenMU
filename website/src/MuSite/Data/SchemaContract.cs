@@ -156,7 +156,10 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
             {
                 await using var command = source.CreateCommand(
                     """SELECT "Id" FROM config."AttributeDefinition" WHERE "Id" = ANY(@ids)""");
-                command.Parameters.AddWithValue("ids", StatIds.All.ToArray());
+                // Required, not All: StatIds.Catalogue holds monster attributes that only the GM
+                // console reads. A server that never seeded one of those must not have its public
+                // pages replaced by the maintenance notice over a blank column in a reference table.
+                command.Parameters.AddWithValue("ids", StatIds.Required.ToArray());
 
                 var found = new HashSet<Guid>();
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -165,7 +168,7 @@ public sealed class SchemaContract(SiteDataSources sources, ILogger<SchemaContra
                     found.Add(reader.GetGuid(0));
                 }
 
-                foreach (var missing in StatIds.All.Where(id => !found.Contains(id)))
+                foreach (var missing in StatIds.Required.Where(id => !found.Contains(id)))
                 {
                     problems.Add($"config.AttributeDefinition has no row {missing} - see Data/StatIds.cs");
                 }

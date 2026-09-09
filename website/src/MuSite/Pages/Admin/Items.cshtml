@@ -1,0 +1,174 @@
+@page "/admin/items"
+@model MuSite.Pages.Admin.ItemsModel
+@{
+    ViewData["Title"] = "Items";
+}
+
+<h1>Items</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    Search the game's item definitions, then build an <code>/item</code> command. The command drops the
+    item on the ground next to you &mdash; stand by the player and they can pick it up.
+</p>
+
+<div class="mu-panel">
+    <div class="mu-panel__body">
+        <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div class="mu-field" style="max-width:280px;margin-bottom:0">
+                <label class="mu-label" for="q">Item name</label>
+                <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
+                       placeholder="e.g. jewel of bless" autofocus />
+            </div>
+            <div class="mu-field" style="max-width:140px;margin-bottom:0">
+                <label class="mu-label" for="group">Group</label>
+                <input class="mu-input" id="group" name="group" type="number" min="0" max="15"
+                       value="@(Model.Group?.ToString() ?? string.Empty)" placeholder="any" />
+            </div>
+            <button class="mu-btn" type="submit">Search</button>
+        </form>
+
+        <p class="mu-hint">Jewels are group @MuSite.Game.GmCommands.JewelGroup in Season 6.</p>
+
+        @if (Model.Results.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">No match</div>
+                Nothing matches that name and group.
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead>
+                        <tr>
+                            <th class="mu-table__num">Group</th>
+                            <th class="mu-table__num">No.</th>
+                            <th>Name</th>
+                            <th class="mu-table__num">Max +</th>
+                            <th class="mu-table__num">Sockets</th>
+                            <th class="mu-table__num">Drop lvl</th>
+                            <th>Notes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.Results)
+                    {
+                        <tr>
+                            <td class="mu-table__num">@item.Group</td>
+                            <td class="mu-table__num">@item.Number</td>
+                            <td>@item.Name</td>
+                            <td class="mu-table__num">@(item.MaximumItemLevel > 0 ? $"+{item.MaximumItemLevel}" : "—")</td>
+                            <td class="mu-table__num">@(item.MaximumSockets > 0 ? item.MaximumSockets.ToString() : "—")</td>
+                            <td class="mu-table__num">@item.DropLevel</td>
+                            <td>
+                                @if (item.IsQuestItem)
+                                {
+                                    <span class="mu-badge">quest</span>
+                                }
+                                @if (!item.DropsFromMonsters)
+                                {
+                                    <span class="mu-badge">no drop</span>
+                                }
+                            </td>
+                            <td>
+                                <a class="mu-btn" href="/admin/items?q=@Uri.EscapeDataString(Model.Query ?? string.Empty)&amp;group=@item.Group&amp;number=@item.Number">Build</a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@if (Model.Selected is { } selected)
+{
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">@selected.Name &mdash; build /item</h2>
+        </div>
+        <div class="mu-panel__body">
+            <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                <input type="hidden" name="q" value="@Model.Query" />
+                <input type="hidden" name="group" value="@selected.Group" />
+                <input type="hidden" name="number" value="@selected.Number" />
+
+                <div class="mu-field" style="max-width:110px;margin-bottom:0">
+                    <label class="mu-label" for="lvl">Level (+)</label>
+                    <input class="mu-input" id="lvl" name="lvl" type="number" min="0"
+                           max="@selected.MaximumItemLevel" value="@(Model.Request?.Level ?? 0)" />
+                </div>
+                <div class="mu-field" style="max-width:130px;margin-bottom:0">
+                    <label class="mu-label" for="ex">Excellent (0&ndash;63)</label>
+                    <input class="mu-input" id="ex" name="ex" type="number" min="0" max="63"
+                           value="@(Model.Request?.ExcellentNumber ?? 0)" />
+                </div>
+                <div class="mu-field" style="max-width:110px;margin-bottom:0">
+                    <label class="mu-label" for="opt">Option</label>
+                    <input class="mu-input" id="opt" name="opt" type="number" min="0" max="7"
+                           value="@(Model.Request?.Opt ?? 0)" />
+                </div>
+                <div class="mu-field" style="max-width:110px;margin-bottom:0">
+                    <label class="mu-label" for="anc">Ancient</label>
+                    <select class="mu-input" id="anc" name="anc">
+                        @for (var value = 0; value <= 2; value++)
+                        {
+                            <option value="@value" selected="@((Model.Request?.Ancient ?? 0) == value)">@value</option>
+                        }
+                    </select>
+                </div>
+                <div class="mu-field" style="max-width:130px;margin-bottom:0">
+                    <label class="mu-label" for="ancLvl">Ancient bonus</label>
+                    <select class="mu-input" id="ancLvl" name="ancLvl">
+                        @for (var value = 1; value <= 2; value++)
+                        {
+                            <option value="@value" selected="@((Model.Request?.AncientBonusLevel ?? 1) == value)">@value</option>
+                        }
+                    </select>
+                </div>
+                <div class="mu-field" style="margin-bottom:0">
+                    <label class="mu-label" for="sk">
+                        <input id="sk" name="sk" type="checkbox" value="true" checked="@(Model.Request?.Skill ?? false)" /> Skill
+                    </label>
+                    <label class="mu-label" for="lu">
+                        <input id="lu" name="lu" type="checkbox" value="true" checked="@(Model.Request?.Luck ?? false)" /> Luck
+                    </label>
+                </div>
+                <button class="mu-btn" type="submit">Rebuild</button>
+            </form>
+
+            @if (Model.Problems.Count > 0)
+            {
+                <div class="mu-notice mu-notice--warn">
+                    <strong>No command built.</strong>
+                    <ul style="margin:8px 0 0">
+                        @foreach (var problem in Model.Problems)
+                        {
+                            <li>@problem</li>
+                        }
+                    </ul>
+                </div>
+            }
+            else if (Model.Command is { } command)
+            {
+                <div class="mu-field" style="margin-top:16px">
+                    <label class="mu-label" for="item-command">Run this in game</label>
+                    <input class="mu-input" id="item-command" type="text" value="@command" readonly />
+                </div>
+                <p class="mu-hint">
+                    Only the options you changed are included &mdash; the server defaults the rest, and a
+                    shorter command is easier to retype.
+                </p>
+            }
+
+            @if (Model.CommandDisabledByDefault)
+            {
+                <div class="mu-notice mu-notice--warn">
+                    <code>/item</code> is disabled by default. Enable it on the admin panel's Plugins page.
+                </div>
+            }
+        </div>
+    </div>
+}
