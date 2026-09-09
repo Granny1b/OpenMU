@@ -138,16 +138,16 @@ public sealed class GameCatalog(SiteDataSources sources)
     {
         const string sql =
             """
-            SELECT "Group"            AS "Group",
-                   "Number"           AS Number,
+            SELECT "Group"::int       AS "Group",
+                   "Number"::int      AS Number,
                    "Name"             AS Name,
-                   "MaximumItemLevel" AS MaximumItemLevel,
+                   "MaximumItemLevel"::int AS MaximumItemLevel,
                    "MaximumSockets"   AS MaximumSockets,
-                   "DropLevel"        AS DropLevel,
-                   "MaximumDropLevel" AS MaximumDropLevel,
-                   "Width"            AS Width,
-                   "Height"           AS Height,
-                   "Durability"       AS Durability,
+                   "DropLevel"::int   AS DropLevel,
+                   "MaximumDropLevel"::int AS MaximumDropLevel,
+                   "Width"::int       AS Width,
+                   "Height"::int      AS Height,
+                   "Durability"::int  AS Durability,
                    "IsQuestItem"      AS IsQuestItem,
                    "DropsFromMonsters" AS DropsFromMonsters
               FROM config."ItemDefinition"
@@ -173,16 +173,16 @@ public sealed class GameCatalog(SiteDataSources sources)
     {
         const string sql =
             """
-            SELECT "Group"            AS "Group",
-                   "Number"           AS Number,
+            SELECT "Group"::int       AS "Group",
+                   "Number"::int      AS Number,
                    "Name"             AS Name,
-                   "MaximumItemLevel" AS MaximumItemLevel,
+                   "MaximumItemLevel"::int AS MaximumItemLevel,
                    "MaximumSockets"   AS MaximumSockets,
-                   "DropLevel"        AS DropLevel,
-                   "MaximumDropLevel" AS MaximumDropLevel,
-                   "Width"            AS Width,
-                   "Height"           AS Height,
-                   "Durability"       AS Durability,
+                   "DropLevel"::int   AS DropLevel,
+                   "MaximumDropLevel"::int AS MaximumDropLevel,
+                   "Width"::int       AS Width,
+                   "Height"::int      AS Height,
+                   "Durability"::int  AS Durability,
                    "IsQuestItem"      AS IsQuestItem,
                    "DropsFromMonsters" AS DropsFromMonsters
               FROM config."ItemDefinition"

@@ -153,6 +153,25 @@ It refuses to write a catalogue with fewer than 50 commands, and `GmCommandsTest
 shapes it must produce — two earlier versions of that generator each silently dropped arguments,
 which is worse than not having one.
 
+### Checking a query against the database
+
+`tools/verify-query-mapping.py` asks PostgreSQL what each catalogue query actually returns and
+compares it to the record's constructor — by name, in order, **and by type**:
+
+```bash
+MUSITE_TEST_DB="Host=localhost;Username=postgres;Password=...;Database=openmu" \
+    python3 website/tools/verify-query-mapping.py
+```
+
+Dapper matches constructor parameters to columns pairwise and rejects the constructor outright on
+any mismatch, at the first row read — never at compile time, and never on an empty result. Three
+separate failures shipped that way: `CharacterProfile` had three columns in the wrong order,
+`NewsItem`/`AuditEntry`/`BanRecord` declared `DateTimeOffset` against `timestamptz`, and `ItemRow`
+declared `int` against `smallint`. Run this before pushing a query change.
+
+An earlier version compared names and order only, and passed the `ItemRow` queries the day they
+were written — the bug was in the types. That is why it checks all three.
+
 ### Two things about argument syntax
 
 Most commands take `name=value` pairs in any order, and the short names are matched **exactly and

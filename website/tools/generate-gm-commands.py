@@ -136,9 +136,19 @@ def commands(shared, desc):
                   or re.search(r'MinCharacterStatusRequirement\s*=>\s*CharacterStatus\.(\w+)', src))
         argtype = re.search(r'\[ChatCommandHelp\([^\]]*typeof\((?:[\w.]+\.)?(\w+)\)', src, re.S)
         stem = os.path.basename(path)[:-3]
+
+        # No default. Every command in the tree today declares its status explicitly, one of two
+        # ways, and both are matched above. If a third way appears upstream, this must stop the
+        # generator rather than quietly emit Normal - a command reported as needing less than it
+        # does is the one kind of error this catalogue must never make.
+        if not status:
+            raise SystemExit(
+                f'{os.path.basename(path)}: cannot find the CharacterStatus for {cmd.group(1)}. '
+                f'Teach the generator the new declaration pattern rather than guessing.')
+
         out.append({
             'command': cmd.group(1),
-            'status': status.group(1) if status else 'Normal',
+            'status': status.group(1),
             'disabled': 'IDisabledByDefault' in src,
             'args': resolve_args(src, argtype.group(1), shared) if argtype else [],
             'description': desc.get(f'{stem}_Description', ''),
