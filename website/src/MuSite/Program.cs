@@ -88,6 +88,10 @@ builder.Services.AddSingleton<StepUp>();
 builder.Services.AddSingleton<NewsStore>();
 builder.Services.AddHostedService<SessionPurgeService>();
 builder.Services.AddHostedService<BanExpiryService>();
+
+// Keeps server_log bounded. Without it the log table grows until the disk is full, at which point
+// PostgreSQL stops accepting writes and takes the game server down with it.
+builder.Services.AddHostedService<LogRetentionService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
 

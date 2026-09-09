@@ -4,8 +4,14 @@
 -- (the grants in 01b-grants.sql need the schemas to exist).
 --
 --   psql -U postgres -d openmu \
---     -v read_pw=... -v auth_pw=... -v reg_pw=... -v app_pw=... -v own_pw=... \
+--     -v read_pw=... -v auth_pw=... -v reg_pw=... -v app_pw=... -v own_pw=... -v log_pw=... \
 --     -f 01-roles.sql
+--
+-- Pass each password RAW. :'read_pw' below already emits a quoted SQL literal, and
+-- format(%L) quotes it again, so -v read_pw="'secret'" yields PASSWORD '''secret''' -
+-- the single quotes end up IN the password and the role stops matching what .env says.
+-- All six must be passed even when five of the roles already exist: psql substitutes the
+-- variables before the WHERE NOT EXISTS is ever evaluated, and errors on one it was not given.
 --
 -- Idempotent: safe to run twice. Contains role creation ONLY - every GRANT lives in 01b-grants.sql,
 -- because grants live in the database catalog and are destroyed when a `-reinit` drops the database.
@@ -38,9 +44,16 @@ SELECT format('CREATE ROLE mu_web_app LOGIN PASSWORD %L', :'app_pw')
 SELECT format('CREATE ROLE mu_web_own LOGIN PASSWORD %L', :'own_pw')
  WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mu_web_own') \gexec
 
+-- The log shipper. Vector connects as this and can only APPEND to server_log - see
+-- db/web/002_server_log.sql. It is a sixth role rather than a reuse of mu_web_app because the
+-- shipper runs in its own container with its own credential, and a shipper able to read the table
+-- back could exfiltrate everything the game server ever logged.
+SELECT format('CREATE ROLE mu_web_log LOGIN PASSWORD %L', :'log_pw')
+ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mu_web_log') \gexec
+
 -- The site's own database. Owned by mu_web_own, which the running site never connects as.
 SELECT 'CREATE DATABASE openmu_web OWNER mu_web_own'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'openmu_web') \gexec
 
 GRANT CONNECT ON DATABASE openmu     TO mu_web_read, mu_web_auth, mu_web_reg;
-GRANT CONNECT ON DATABASE openmu_web TO mu_web_app, mu_web_own;
+GRANT CONNECT ON DATABASE openmu_web TO mu_web_app, mu_web_own, mu_web_log;

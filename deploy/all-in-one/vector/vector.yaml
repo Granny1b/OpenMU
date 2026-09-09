@@ -1,0 +1,107 @@
+# Ships OpenMU's server log into the website's own database, so /admin/logs can search it.
+#
+# WHY IT READS FILES RATHER THAN THE DOCKER SOCKET
+#
+# Vector's docker_logs source needs /var/run/docker.sock mounted, and read access to that socket is
+# effectively root on the host - a container that can talk to it can start another container with
+# the host filesystem mounted. Reading the log volume read-only needs no such privilege, and the
+# openmu-logs volume exists anyway so that history survives a rebuild.
+#
+# WHY THE IMAGE IS NOT INVOLVED
+#
+# The munique/openmu image carries only Serilog's Console and File sinks - Serilog.Sinks.Grafana.Loki
+# is referenced by src/Dapr/Common, which builds the *distributed* image, not this one. So nothing
+# here changes OpenMU: it keeps writing the same files it always did, and `docker compose pull`
+# still upgrades the server cleanly.
+
+data_dir: /vector-data
+
+sources:
+  openmu_log:
+    type: file
+    include:
+      - /openmu-logs/log*.txt
+    # Read from the end on a first run. Without this, turning Vector on would replay up to 48 files
+    # of history - roughly 190 MB - into the database in one go.
+    ignore_older_secs: 86400
+    read_from: end
+
+    # A stack trace is several lines belonging to ONE event. Serilog writes the exception after the
+    # message with no timestamp of its own, so lines accumulate until the next line that starts with
+    # a timestamp. Without this every "   at Foo.Bar()" frame would arrive as its own log entry and
+    # the exception would be unreadable.
+    multiline:
+      mode: halt_before
+      start_pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} \['
+      condition_pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} \['
+      timeout_ms: 1000
+
+transforms:
+  parsed:
+    type: remap
+    inputs: [openmu_log]
+    # A line that fails to parse is KEPT, not dropped: a log system that silently discards what it
+    # does not understand is worse than none, because the absence looks like silence.
+    source: |
+      raw = string!(.message)
+
+      # The first line is the event; anything after it is the exception.
+      halves = split(raw, "\n", limit: 2)
+      head = halves[0]
+      trace = if length(halves) > 1 { strip_whitespace(string!(halves[1])) } else { "" }
+
+      # Three bracket groups from the LEFT, then the rest is the message. Anchored and
+      # non-greedy on purpose: real messages contain brackets, e.g.
+      #   Item 'Jewel of Bless' got picked up by player '[GM] Granny' [slot 3]
+      # so matching brackets loosely would eat the message. SourceContext is a type name and
+      # EventId renders as "{ Id = 42, Name = X }" - neither can contain "]".
+      fields, err = parse_regex(head, r'^(?P<at>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2}) \[(?P<level>\w+)\] \[(?P<source>[^\]]*)\] \[(?P<event_id>[^\]]*)\] (?P<message>.*)$')
+
+      if err == null {
+        .at = parse_timestamp!(fields.at, "%Y-%m-%d %H:%M:%S%.3f %:z")
+        .level = fields.level
+        .source = if fields.source == "" { null } else { fields.source }
+        .event_id = if fields.event_id == "" { null } else { fields.event_id }
+        .message = fields.message
+      } else {
+        .at = now()
+        .level = "Unparsed"
+        .source = null
+        .event_id = null
+        .message = raw
+      }
+
+      .exception = if trace == "" { null } else { trace }
+
+      # uuid_v4 rather than a bigserial default: the postgres sink builds the row from the event's
+      # own fields, so a column the event does not carry would be sent as NULL and break a serial
+      # primary key. A unique id also gives /admin/logs a total order to page by - ordering on the
+      # timestamp alone repeats and skips rows when two events share a millisecond.
+      .id = uuid_v4()
+
+      # Everything Vector adds of its own (file, host, source_type, timestamp) is dropped: the
+      # table has no columns for them and they would just be serialised and discarded.
+      . = {"id": .id, "at": .at, "level": .level, "source": .source,
+           "event_id": .event_id, "message": .message, "exception": .exception}
+
+  # Debug and Verbose are off in OpenMU's default configuration, but raising the level to chase a
+  # bug should not silently start writing 243 extra call sites into the database. Anything below
+  # Information is dropped here, so the level can be raised in the game server without a surprise.
+  wanted:
+    type: filter
+    inputs: [parsed]
+    condition: '!includes(["Debug", "Verbose"], .level)'
+
+sinks:
+  web_db:
+    type: postgres
+    inputs: [wanted]
+    endpoint: ${MUSITE_LOG_DSN}
+    table: server_log
+    batch:
+      max_events: 200
+      timeout_secs: 5
+    # Keep trying rather than dropping: a database restart must not lose the log lines that explain
+    # why it restarted.
+    request:
+      retry_attempts: 10

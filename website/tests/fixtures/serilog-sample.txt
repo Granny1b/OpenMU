@@ -1,0 +1,23 @@
+2026-09-09 11:16:43.590 +00:00 [Information] [MUnique.OpenMU.GameServer.GameServer] [] Server listener started.
+2026-09-09 11:16:43.611 +00:00 [Information] [MUnique.OpenMU.GameServer.GameServer] [] Starting Server Listener, port 55901
+2026-09-09 11:16:43.612 +00:00 [Information] [MUnique.OpenMU.GameLogic.Player] [] Guild created: ["Dragons"], Master: ["Granny"]
+2026-09-09 11:16:43.613 +00:00 [Warning] [MUnique.OpenMU.GameLogic.Player] [] Trader "Valdrenn" invoked CancelTrade, but it probably wasn't in a trade.
+2026-09-09 11:16:43.614 +00:00 [Error] [MUnique.OpenMU.Network.Connection] [] Client "10.0.0.5":55901 will be disconnected because it sent an unknown packet: "C1 04 F3 30"
+2026-09-09 11:16:43.616 +00:00 [Information] [MUnique.OpenMU.GameLogic.Player] [{ Id = 42, Name = ItemCreated }] Crafted item: "Dragon Slayer +9"
+2026-09-09 11:16:43.616 +00:00 [Information] [] [] Begin starting
+2026-09-09 11:16:43.617 +00:00 [Error] [MUnique.OpenMU.GameLogic.Player] [] Unexpected error handling the chat command '"/move"'.
+System.InvalidOperationException: no game map with number 8 is configured
+   at P.Main() in /var/tmp/pgwork/serigen/Program.cs:line 41
+2026-09-09 11:16:43.642 +00:00 [Information] [MUnique.OpenMU.GameLogic.Player] [] Item '"Jewel of Bless"' got picked up by player '[GM] Granny' [slot 3]
+2026-09-09 11:16:43.642 +00:00 [Debug] [MUnique.OpenMU.GameLogic.Player] [] A debug line
+2026-09-09 11:16:43.642 +00:00 [Fatal] [MUnique.OpenMU.GameLogic.Player] [] A fatal line
+2026-09-09 11:16:43.642 +00:00 [Verbose] [MUnique.OpenMU.GameLogic.Player] [] A verbose line
+2026-09-09 11:16:44.101 +00:00 [Information] [MUnique.OpenMU.GameLogic.Player] [] A message ending in a bracket ]
+2026-09-09 11:16:44.102 +00:00 [Error] [MUnique.OpenMU.Persistence.EntityFramework.RepositoryProvider] [] Could not load account
+Npgsql.PostgresException (0x80004005): 42501: permission denied for table Account
+   at Npgsql.Internal.NpgsqlConnector.<ReadMessage>g__ReadMessageLong|213_0()
+   at MUnique.OpenMU.Persistence.EntityFramework.GenericRepository`1.GetByIdAsync(Guid id)
+  Exception data:
+    Severity: ERROR
+    SqlState: 42501
+2026-09-09 11:16:44.500 +00:00 [Information] [] [] Finished starting

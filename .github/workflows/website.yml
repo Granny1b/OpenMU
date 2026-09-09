@@ -94,7 +94,7 @@ jobs:
           # 01-roles.sql also creates the openmu_web database, so it must run before the site
           # schema step below.
           psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 \
-               -v read_pw=ci -v auth_pw=ci -v reg_pw=ci -v app_pw=ci -v own_pw=ci \
+               -v read_pw=ci -v auth_pw=ci -v reg_pw=ci -v app_pw=ci -v own_pw=ci -v log_pw=ci \
                -f db/01-roles.sql
           psql -h localhost -U postgres -d openmu -v ON_ERROR_STOP=1 -f db/01b-grants.sql
 
@@ -146,8 +146,38 @@ jobs:
         env:
           PGPASSWORD: ci
         run: |
-          psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
-          psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f db/web/001_init.sql
+          for pass in 1 2; do
+            for file in db/web/*.sql; do
+              psql -h localhost -U mu_web_own -d openmu_web -v ON_ERROR_STOP=1 -f "$file"
+            done
+          done
+
+          # The log shipper appends and does nothing else. A shipper that could SELECT could
+          # exfiltrate everything the server ever logged; one that could DELETE could cover its
+          # tracks. And audit_log must KEEP its no-DELETE guarantee even though server_log has one.
+          deny() {
+            if PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_web -tAc "$2" >/dev/null 2>&1; then
+              echo "::error::$1 was ALLOWED to run: $2"; exit 1
+            fi
+            echo "denied as expected: $1 -- $2"
+          }
+          allow() {
+            if ! PGPASSWORD=ci psql -h localhost -U "$1" -d openmu_web -tAc "$2" >/dev/null 2>&1; then
+              echo "::error::$1 was DENIED but must be allowed: $2"; exit 1
+            fi
+            echo "allowed as expected: $1 -- $2"
+          }
+
+          allow mu_web_log "INSERT INTO server_log (id,at,level,message) VALUES (gen_random_uuid(), now(), 'Information', 'ci')"
+          deny  mu_web_log 'SELECT count(*) FROM server_log'
+          deny  mu_web_log 'DELETE FROM server_log'
+          deny  mu_web_log "UPDATE server_log SET message = 'tampered'"
+          deny  mu_web_log 'SELECT * FROM audit_log'
+          deny  mu_web_log 'SELECT * FROM web_session'
+          allow mu_web_app 'SELECT count(*) FROM server_log'
+          allow mu_web_app "DELETE FROM server_log WHERE at < now() - interval '99 years'"
+          deny  mu_web_app 'DELETE FROM audit_log'
+          deny  mu_web_app "INSERT INTO server_log (id,at,level,message) VALUES (gen_random_uuid(), now(), 'x', 'y')"
 
       - name: Test
         env:
@@ -167,6 +197,13 @@ jobs:
           MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
           PGPASSWORD: ci
         run: python3 tools/verify-query-mapping.py
+
+      # The shipper's regex fails SILENTLY: a pattern that does not match does not error, it files
+      # everything under level "Unparsed", and a missing log line looks exactly like nothing having
+      # happened. Vector cannot run here, so this checks the pattern - read out of vector.yaml, not
+      # copied - against real Serilog output.
+      - name: The log shipper parses OpenMU's real log format
+        run: python3 tools/verify-log-parse.py
 
       # 001_init.sql claims audit_log is append-only because mu_web_app does not own it. That claim
       # is a comment until something checks it. The INSERT is asserted too: without it, a table the
