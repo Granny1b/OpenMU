@@ -141,8 +141,22 @@ public static partial class GmCommands
         return string.Join(' ', parts);
     }
 
-    /// <summary>What is wrong with a requested item, if anything.</summary>
-    public static IReadOnlyList<string> ValidateItem(ItemRow? definition, ItemRequest request)
+    /// <summary>
+    /// What is wrong with a requested item, checked against that item's own configuration.
+    ///
+    /// The three optional arguments are what the item can actually do, read out of the catalogue.
+    /// They default to "not known", in which case only the limits ItemChatCommandArgs enforces are
+    /// checked - which is what the pure command tests want. When the caller does know, the checks
+    /// get sharper: /item silently IGNORES an excellent bit the item has no option for, and an
+    /// ancient discriminator that names no set, so a command carrying either looks like it worked
+    /// and produces a plainer item than the GM asked for.
+    /// </summary>
+    public static IReadOnlyList<string> ValidateItem(
+        ItemRow? definition,
+        ItemRequest request,
+        int? excellentMask = null,
+        int? highestOptionLevel = null,
+        IReadOnlyList<int>? ancientDiscriminators = null)
     {
         var problems = new List<string>();
 
@@ -178,6 +192,40 @@ public static partial class GmCommands
         if (request.ExcellentNumber is < 0 or > 63)
         {
             problems.Add("Excellent options are a bit field from 0 to 63.");
+        }
+
+        if (request.ExcellentNumber > 0 && excellentMask is { } mask)
+        {
+            if (mask == 0)
+            {
+                problems.Add($"{definition.Name} carries no excellent options, so ex would do nothing.");
+            }
+            else if ((request.ExcellentNumber & ~mask) != 0)
+            {
+                problems.Add(
+                    $"{definition.Name} has no excellent option for every bit of ex={request.ExcellentNumber}; "
+                    + $"the ones it does have add up to {mask}.");
+            }
+        }
+
+        if (request.Opt > 0 && highestOptionLevel is { } highest && request.Opt > highest)
+        {
+            problems.Add(highest == 0
+                ? $"{definition.Name} carries no ordinary option, so opt would do nothing."
+                : $"{definition.Name}'s option goes up to level {highest}; opt={request.Opt} has no value configured.");
+        }
+
+        if (request.Ancient > 0 && ancientDiscriminators is { Count: > 0 }
+            && !ancientDiscriminators.Contains(request.Ancient))
+        {
+            problems.Add(
+                $"{definition.Name} has no ancient set {request.Ancient}; "
+                + $"it belongs to {string.Join(" and ", ancientDiscriminators)}.");
+        }
+
+        if (request.Ancient > 0 && ancientDiscriminators is { Count: 0 })
+        {
+            problems.Add($"{definition.Name} is not part of any ancient set, so anc would do nothing.");
         }
 
         if (definition.IsQuestItem)

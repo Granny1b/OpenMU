@@ -121,8 +121,15 @@ if someone has since made the ban permanent.
 
 ## GM console
 
-`/admin/items`, `/admin/monsters`, `/admin/maps` and `/admin/commands` read the game's own
-configuration and compose the exact chat command to run in-game.
+`/admin/items`, `/admin/monsters` and `/admin/commands` read the game's own configuration and
+compose the exact chat command to run in-game.
+
+`/admin/items` asks in the item's own terms rather than in the command's. `/item`'s three option
+arguments look alike and are counted three different ways — `ex` is a bit field over the item's own
+excellent options, `opt` is an option *level* for every item except the Dinorant (where it is a
+three-bit field), and `anc` is an `AncientSetDiscriminator` whose 1 and 2 name two different real
+sets, per item. The builder reads all of that out of `config` and shows tick boxes and named sets;
+the arithmetic that turns them back into `ex=44` is the page's job, not the GM's.
 
 **The site does not, and cannot, execute them.** Three independent reasons, each verified in the
 server source rather than assumed:

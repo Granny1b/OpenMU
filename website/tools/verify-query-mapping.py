@@ -71,11 +71,15 @@ PARAMETERS = {
     '@maxDmgId': "'8A918EA2-893A-48B2-A684-3E71526CA71F'::uuid",
     '@defenseId': "'EB098C46-60D4-4CA6-BBD4-5B6270A1407B'::uuid",
     '@monsterNumber': '78',
-    '@mapNumber': '8',
     '@search': "''",
     '@group': 'NULL::int',
     '@limit': '50',
     '@number': '13',
+
+    # ItemOptionTypes.Excellent and ItemOptionTypes.Option, which is what tells an item's
+    # bit-field options apart from its levelled one.
+    '@excellentType': "'6487C498-58E0-48E5-B409-35D7598313FC'::uuid",
+    '@optionType': "'F193F91E-86D7-4456-ADD8-A3667E731303'::uuid",
 }
 
 

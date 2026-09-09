@@ -29,13 +29,48 @@ public sealed record SpawnRow(
     int Quantity, int SpawnTrigger);
 
 /// <summary>An item definition, as the /item builder needs it.</summary>
+///
+/// <remarks>
+/// SkillNumber is here for one reason: skill 49 is the Dinorant, and it is the single item for
+/// which ItemChatCommandPlugIn reads `opt` as a three-bit field instead of an option level. A page
+/// that labelled a Dinorant's opt box "level" would be confidently wrong.
+/// </remarks>
 public sealed record ItemRow(
     int Group, int Number, string Name, int MaximumItemLevel, int MaximumSockets,
     int DropLevel, int? MaximumDropLevel, int Width, int Height, int Durability,
-    bool IsQuestItem, bool DropsFromMonsters);
+    bool IsQuestItem, bool DropsFromMonsters, int? SkillNumber);
 
-/// <summary>A game map, for /move.</summary>
-public sealed record MapRow(int Number, string Name, double ExpMultiplier, int SpawnAreas);
+/// <summary>
+/// One excellent option an item can carry, and the bit of `ex` that selects it.
+///
+/// Number is the option's own number within its definition, 1-6; BitValue is 1 &lt;&lt; (Number - 1),
+/// which is what ItemChatCommandPlugIn.AddExcellentOptions masks `ex` against. Value/AggregateType
+/// describe the effect (AddRaw 0, Multiplicate 1, AddFinal 2, Maximum 3); ScalesWith is set instead
+/// for the one option per set whose bonus is a relationship to another stat rather than a constant.
+/// </summary>
+public sealed record ExcellentOptionRow(
+    int Number, int BitValue, string? Attribute, decimal Value, int AggregateType,
+    string? ScalesWith, decimal? ScalesWithFactor);
+
+/// <summary>
+/// One level of one ordinary (Option-type) option an item can carry.
+///
+/// For everything but the Dinorant, `opt` IS this level - ItemChatCommandPlugIn.AddOption takes the
+/// item's first Option-type option and applies it at Level = opt. Level 1 comes from the option's
+/// own boost; the rest are rows in config."ItemOptionOfLevel".
+/// </summary>
+public sealed record OptionLevelRow(
+    Guid AttributeId, string Attribute, int Level, decimal Value, int AggregateType);
+
+/// <summary>
+/// One ancient set an item belongs to, and therefore what `anc=N` means for that item.
+///
+/// Discriminator is the number to pass: for a Dragon set item, 1 is Hyon and 2 is Vicious. The
+/// bonus option is applied at `ancBonuslvl`, which is why both level values are here.
+/// </summary>
+public sealed record AncientSetRow(
+    int Discriminator, string SetName, int SetLevel, int MinimumItemCount,
+    string? BonusAttribute, decimal? BonusAtLevel1, decimal? BonusAtLevel2, int ItemsInSet);
 
 /// <summary>
 /// Read-only reference data out of the `config` schema, for the GM console.
@@ -138,22 +173,24 @@ public sealed class GameCatalog(SiteDataSources sources)
     {
         const string sql =
             """
-            SELECT "Group"::int       AS "Group",
-                   "Number"::int      AS Number,
-                   "Name"             AS Name,
-                   "MaximumItemLevel"::int AS MaximumItemLevel,
-                   "MaximumSockets"   AS MaximumSockets,
-                   "DropLevel"::int   AS DropLevel,
-                   "MaximumDropLevel"::int AS MaximumDropLevel,
-                   "Width"::int       AS Width,
-                   "Height"::int      AS Height,
-                   "Durability"::int  AS Durability,
-                   "IsQuestItem"      AS IsQuestItem,
-                   "DropsFromMonsters" AS DropsFromMonsters
-              FROM config."ItemDefinition"
-             WHERE (@search = '' OR "Name" ILIKE '%' || @search || '%')
-               AND (@group IS NULL OR "Group" = @group)
-             ORDER BY "Group", "Number"
+            SELECT d."Group"::int       AS "Group",
+                   d."Number"::int      AS Number,
+                   d."Name"             AS Name,
+                   d."MaximumItemLevel"::int AS MaximumItemLevel,
+                   d."MaximumSockets"   AS MaximumSockets,
+                   d."DropLevel"::int   AS DropLevel,
+                   d."MaximumDropLevel"::int AS MaximumDropLevel,
+                   d."Width"::int       AS Width,
+                   d."Height"::int      AS Height,
+                   d."Durability"::int  AS Durability,
+                   d."IsQuestItem"      AS IsQuestItem,
+                   d."DropsFromMonsters" AS DropsFromMonsters,
+                   (SELECT s."Number"::int FROM config."Skill" s
+                     WHERE s."Id" = d."SkillId")     AS SkillNumber
+              FROM config."ItemDefinition" d
+             WHERE (@search = '' OR d."Name" ILIKE '%' || @search || '%')
+               AND (@group IS NULL OR d."Group" = @group)
+             ORDER BY d."Group", d."Number"
              LIMIT @limit
             """;
 
@@ -173,20 +210,22 @@ public sealed class GameCatalog(SiteDataSources sources)
     {
         const string sql =
             """
-            SELECT "Group"::int       AS "Group",
-                   "Number"::int      AS Number,
-                   "Name"             AS Name,
-                   "MaximumItemLevel"::int AS MaximumItemLevel,
-                   "MaximumSockets"   AS MaximumSockets,
-                   "DropLevel"::int   AS DropLevel,
-                   "MaximumDropLevel"::int AS MaximumDropLevel,
-                   "Width"::int       AS Width,
-                   "Height"::int      AS Height,
-                   "Durability"::int  AS Durability,
-                   "IsQuestItem"      AS IsQuestItem,
-                   "DropsFromMonsters" AS DropsFromMonsters
-              FROM config."ItemDefinition"
-             WHERE "Group" = @group AND "Number" = @number
+            SELECT d."Group"::int       AS "Group",
+                   d."Number"::int      AS Number,
+                   d."Name"             AS Name,
+                   d."MaximumItemLevel"::int AS MaximumItemLevel,
+                   d."MaximumSockets"   AS MaximumSockets,
+                   d."DropLevel"::int   AS DropLevel,
+                   d."MaximumDropLevel"::int AS MaximumDropLevel,
+                   d."Width"::int       AS Width,
+                   d."Height"::int      AS Height,
+                   d."Durability"::int  AS Durability,
+                   d."IsQuestItem"      AS IsQuestItem,
+                   d."DropsFromMonsters" AS DropsFromMonsters,
+                   (SELECT s."Number"::int FROM config."Skill" s
+                     WHERE s."Id" = d."SkillId")     AS SkillNumber
+              FROM config."ItemDefinition" d
+             WHERE d."Group" = @group AND d."Number" = @number
             """;
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -194,59 +233,169 @@ public sealed class GameCatalog(SiteDataSources sources)
             new CommandDefinition(sql, new { group, number }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    /// <summary>Maps, with how many spawn areas each carries.</summary>
-    public async Task<IReadOnlyList<MapRow>> MapsAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The excellent options one item can carry, in the order their bits are counted.
+    ///
+    /// This is what makes the `ex` box mean something. ItemChatCommandPlugIn.AddExcellentOptions
+    /// takes the item's OWN excellent options and keeps the ones whose bit is set:
+    ///
+    ///     .Where(o =&gt; ((1 &lt;&lt; (o.Number - 1)) &amp; arguments.ExcellentNumber) &gt; 0)
+    ///
+    /// so `ex` is not a value from 0 to 63 that a GM should be asked to work out - it is a sum of
+    /// the bits below, and a weapon's option 1 is a different thing from an armour's option 1.
+    /// </summary>
+    public async Task<IReadOnlyList<ExcellentOptionRow>> ItemExcellentOptionsAsync(
+        int group, int number, CancellationToken cancellationToken)
     {
         const string sql =
             """
-            SELECT g."Number"::int   AS Number,
-                   g."Name"          AS Name,
-                   g."ExpMultiplier" AS ExpMultiplier,
-                   (SELECT count(*)::int FROM config."MonsterSpawnArea" s
-                     WHERE s."GameMapId" = g."Id") AS SpawnAreas
-              FROM config."GameMapDefinition" g
-             ORDER BY g."Number"
+            SELECT o."Number"::int                       AS Number,
+                   (1 << (o."Number" - 1))::int          AS BitValue,
+                   a."Designation"                       AS Attribute,
+                   COALESCE(v."Value", 0)::real::numeric AS Value,
+                   COALESCE(v."AggregateType", 0)::int   AS AggregateType,
+                   (SELECT ra."Designation"
+                      FROM config."AttributeRelationship" r
+                      JOIN config."AttributeDefinition" ra ON ra."Id" = r."InputAttributeId"
+                     WHERE r."PowerUpDefinitionValueId" = v."Id"
+                     LIMIT 1)                            AS ScalesWith,
+                   (SELECT r."InputOperand"::real::numeric
+                      FROM config."AttributeRelationship" r
+                     WHERE r."PowerUpDefinitionValueId" = v."Id"
+                     LIMIT 1)                            AS ScalesWithFactor
+              FROM config."ItemDefinition" d
+              JOIN config."ItemDefinitionItemOptionDefinition" j ON j."ItemDefinitionId" = d."Id"
+              JOIN config."ItemOptionDefinition" od  ON od."Id" = j."ItemOptionDefinitionId"
+              JOIN config."IncreasableItemOption" o  ON o."ItemOptionDefinitionId" = od."Id"
+              LEFT JOIN config."PowerUpDefinition" p      ON p."Id" = o."PowerUpDefinitionId"
+              LEFT JOIN config."PowerUpDefinitionValue" v ON v."Id" = p."BoostId"
+              LEFT JOIN config."AttributeDefinition" a    ON a."Id" = p."TargetAttributeId"
+             WHERE d."Group" = @group AND d."Number" = @number
+               AND o."OptionTypeId" = @excellentType
+               AND o."Number" BETWEEN 1 AND 8
+             ORDER BY o."Number"
             """;
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<MapRow>(
-            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<ExcellentOptionRow>(new CommandDefinition(sql, new
+        {
+            group,
+            number,
+            excellentType = StatIds.ExcellentOptionType,
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return rows.AsList();
     }
 
-    /// <summary>What spawns on one map, highest level first.</summary>
-    public async Task<IReadOnlyList<MonsterRow>> MonstersOnMapAsync(int mapNumber, CancellationToken cancellationToken)
+    /// <summary>
+    /// Every level of every ordinary option one item can carry, lowest first.
+    ///
+    /// Level 1 is the option's own boost; levels above it are rows in config."ItemOptionOfLevel",
+    /// seeded as level * baseValue - which is where +4/+8/+12/+16 comes from
+    /// (GameConfigurationInitializerBase.CreateOptionDefinition). Reading them rather than assuming
+    /// the four means the page stays right on a server that configured more.
+    /// </summary>
+    public async Task<IReadOnlyList<OptionLevelRow>> ItemOptionLevelsAsync(
+        int group, int number, CancellationToken cancellationToken)
     {
         const string sql =
             """
-            SELECT m."Number"::int                                                       AS Number,
-                   m."Designation"                                                       AS Designation,
-                   COALESCE(MAX(a."Value") FILTER (WHERE a."AttributeDefinitionId" = @levelId), 0)::int   AS Level,
-                   COALESCE(MAX(a."Value") FILTER (WHERE a."AttributeDefinitionId" = @healthId), 0)::int  AS Health,
-                   COALESCE(MAX(a."Value") FILTER (WHERE a."AttributeDefinitionId" = @minDmgId), 0)::int  AS MinDamage,
-                   COALESCE(MAX(a."Value") FILTER (WHERE a."AttributeDefinitionId" = @maxDmgId), 0)::int  AS MaxDamage,
-                   COALESCE(MAX(a."Value") FILTER (WHERE a."AttributeDefinitionId" = @defenseId), 0)::int AS Defense,
-                   m."ObjectKind"                                                        AS ObjectKind,
-                   count(DISTINCT s."Id")::int                                           AS SpawnAreas
-              FROM config."MonsterSpawnArea" s
-              JOIN config."GameMapDefinition" g ON g."Id" = s."GameMapId"
-              JOIN config."MonsterDefinition" m ON m."Id" = s."MonsterDefinitionId"
-              LEFT JOIN config."MonsterAttribute" a ON a."MonsterDefinitionId" = m."Id"
-             WHERE g."Number" = @mapNumber
-             GROUP BY m."Id", m."Number", m."Designation", m."ObjectKind"
-             ORDER BY 3 DESC, m."Designation" ASC
+            SELECT a."Id"                   AS AttributeId,
+                   a."Designation"          AS Attribute,
+                   1::int                   AS Level,
+                   v."Value"::real::numeric AS Value,
+                   v."AggregateType"::int   AS AggregateType
+              FROM config."ItemDefinition" d
+              JOIN config."ItemDefinitionItemOptionDefinition" j ON j."ItemDefinitionId" = d."Id"
+              JOIN config."ItemOptionDefinition" od     ON od."Id" = j."ItemOptionDefinitionId"
+              JOIN config."IncreasableItemOption" o     ON o."ItemOptionDefinitionId" = od."Id"
+              JOIN config."PowerUpDefinition" p         ON p."Id" = o."PowerUpDefinitionId"
+              JOIN config."PowerUpDefinitionValue" v    ON v."Id" = p."BoostId"
+              JOIN config."AttributeDefinition" a       ON a."Id" = p."TargetAttributeId"
+             WHERE d."Group" = @group AND d."Number" = @number
+               AND o."OptionTypeId" = @optionType
+            UNION ALL
+            SELECT a."Id",
+                   a."Designation",
+                   l."Level"::int,
+                   v."Value"::real::numeric,
+                   v."AggregateType"::int
+              FROM config."ItemDefinition" d
+              JOIN config."ItemDefinitionItemOptionDefinition" j ON j."ItemDefinitionId" = d."Id"
+              JOIN config."ItemOptionDefinition" od     ON od."Id" = j."ItemOptionDefinitionId"
+              JOIN config."IncreasableItemOption" o     ON o."ItemOptionDefinitionId" = od."Id"
+              JOIN config."ItemOptionOfLevel" l         ON l."IncreasableItemOptionId" = o."Id"
+              JOIN config."PowerUpDefinition" p         ON p."Id" = l."PowerUpDefinitionId"
+              JOIN config."PowerUpDefinitionValue" v    ON v."Id" = p."BoostId"
+              JOIN config."AttributeDefinition" a       ON a."Id" = p."TargetAttributeId"
+             WHERE d."Group" = @group AND d."Number" = @number
+               AND o."OptionTypeId" = @optionType
+             ORDER BY 2, 3
             """;
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<MonsterRow>(new CommandDefinition(sql, new
+        var rows = await connection.QueryAsync<OptionLevelRow>(new CommandDefinition(sql, new
         {
-            mapNumber,
-            levelId = StatIds.Level,
-            healthId = StatIds.MaximumHealth,
-            minDmgId = StatIds.MinimumPhysBaseDmg,
-            maxDmgId = StatIds.MaximumPhysBaseDmg,
-            defenseId = StatIds.DefenseBase,
+            group,
+            number,
+            optionType = StatIds.NormalOptionType,
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.AsList();
+    }
+
+    /// <summary>
+    /// The ancient sets one item belongs to - which is what `anc` actually selects.
+    ///
+    /// AddAncientBonusOption looks for a set group among the item's PossibleItemSetGroups holding
+    /// an entry for this item with AncientSetDiscriminator == anc, so the EXISTS below is not
+    /// decoration: a set the item is not linked to is one the command would silently ignore.
+    /// </summary>
+    public async Task<IReadOnlyList<AncientSetRow>> ItemAncientSetsAsync(
+        int group, int number, CancellationToken cancellationToken)
+    {
+        const string sql =
+            """
+            SELECT ios."AncientSetDiscriminator"::int AS Discriminator,
+                   g."Name"                           AS SetName,
+                   g."SetLevel"::int                  AS SetLevel,
+                   g."MinimumItemCount"::int          AS MinimumItemCount,
+                   ba."Designation"                   AS BonusAttribute,
+                   (SELECT bv."Value"::real::numeric
+                      FROM config."ItemOptionOfLevel" l
+                      JOIN config."PowerUpDefinition" lp      ON lp."Id" = l."PowerUpDefinitionId"
+                      JOIN config."PowerUpDefinitionValue" bv ON bv."Id" = lp."BoostId"
+                     WHERE l."IncreasableItemOptionId" = ios."BonusOptionId" AND l."Level" = 1
+                     LIMIT 1)                         AS BonusAtLevel1,
+                   (SELECT bv."Value"::real::numeric
+                      FROM config."ItemOptionOfLevel" l
+                      JOIN config."PowerUpDefinition" lp      ON lp."Id" = l."PowerUpDefinitionId"
+                      JOIN config."PowerUpDefinitionValue" bv ON bv."Id" = lp."BoostId"
+                     WHERE l."IncreasableItemOptionId" = ios."BonusOptionId" AND l."Level" = 2
+                     LIMIT 1)                         AS BonusAtLevel2,
+                   (SELECT count(*)::int FROM config."ItemOfItemSet" m
+                     WHERE m."ItemSetGroupId" = g."Id"
+                       AND m."AncientSetDiscriminator" = ios."AncientSetDiscriminator")
+                                                      AS ItemsInSet
+              FROM config."ItemDefinition" d
+              JOIN config."ItemOfItemSet" ios ON ios."ItemDefinitionId" = d."Id"
+              JOIN config."ItemSetGroup" g    ON g."Id" = ios."ItemSetGroupId"
+              LEFT JOIN config."IncreasableItemOption" bo ON bo."Id" = ios."BonusOptionId"
+              LEFT JOIN config."PowerUpDefinition" bp     ON bp."Id" = bo."PowerUpDefinitionId"
+              LEFT JOIN config."AttributeDefinition" ba   ON ba."Id" = bp."TargetAttributeId"
+             WHERE d."Group" = @group AND d."Number" = @number
+               AND ios."AncientSetDiscriminator" > 0
+               AND EXISTS (SELECT 1 FROM config."ItemDefinitionItemSetGroup" dg
+                            WHERE dg."ItemDefinitionId" = d."Id"
+                              AND dg."ItemSetGroupId" = g."Id")
+             ORDER BY ios."AncientSetDiscriminator"
+            """;
+
+        await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<AncientSetRow>(new CommandDefinition(sql, new
+        {
+            group,
+            number,
         }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return rows.AsList();
