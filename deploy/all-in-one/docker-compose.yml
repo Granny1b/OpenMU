@@ -41,7 +41,9 @@ services:
       OPENMU_ADMIN_PASSWORD: ${OPENMU_ADMIN_PASSWORD:-}
       # Optional base32 TOTP secret, if the bootstrap user should require a second factor.
       OPENMU_ADMIN_TOTP_SECRET: ${OPENMU_ADMIN_TOTP_SECRET:-}
-      # website authenticates itself at the public API under /api.
+      # No API key is configured here: keys are created and stored inside the panel itself, under
+      # /api-keys. The website presents one from its own MUSITE_STATUSAPIKEY when it has been given
+      # one - see the mu-site service below.
     volumes:
       - adminpanel-keys:/app/data-protection-keys
       # Serilog writes logs/log.txt relative to WORKDIR /app, so the server's log lives at
@@ -83,6 +85,20 @@ services:
       # The connect server is reached by container name; the published host ports differ per deploy
       # variant, and probing those would report "offline" on the wrong one.
       MUSITE_PROBEENDPOINTS__0: "openmu-startup:44405"
+      # OPTIONAL, and only for the exact player count on /admin/metrics. Without a key the site still
+      # charts availability and load, because the connect server publishes a load percentage to any
+      # client - but it cannot count players: OpenMU keeps that number in memory, and the percentage
+      # is truncated to whole percent of the player cap, so at the default cap of 1000 it moves ten
+      # players at a time and reads zero below ten.
+      #
+      # Create the key in OpenMU's admin panel under "API keys" with the VIEWER role. Viewer can read
+      # server status; it cannot send global messages, which needs Operator. Note that the same
+      # endpoint also returns the names of everyone online - the website reads only the count.
+      MUSITE_STATUSURL: ${MUSITE_STATUSURL:-http://openmu-startup:8080/api/status}
+      MUSITE_STATUSAPIKEY: ${MUSITE_STATUSAPIKEY:-}
+      # Days of VPS measurements and server samples to keep. Twice the longest window the dashboard
+      # draws; a month is about 1 million rows and 138 MB on a four core machine.
+      MUSITE_METRICSRETENTIONDAYS: ${MUSITE_METRICSRETENTIONDAYS:-14}
       # The docker bridge network, so X-Forwarded-For from nginx is honoured.
       MUSITE_TRUSTEDNETWORKS__0: ${MUSITE_TRUSTEDNETWORKS:-172.16.0.0/12}
     volumes:

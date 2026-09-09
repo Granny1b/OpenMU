@@ -87,6 +87,13 @@ PARAMETERS = {
     '@hours': '24',
     '@level': "''",
     '@source': "''",
+
+    # ServerMetrics. @bucket and @maxGap are second counts, @name a metric name - the view only has
+    # to compile, so the values just have to be of the right type.
+    '@name': "'load1'",
+    '@scope': "''",
+    '@bucket': '60',
+    '@maxGap': '180',
 }
 
 
@@ -150,6 +157,7 @@ def columns(sql, index, connection):
 TARGETS = [
     (os.path.join('src', 'MuSite', 'Data', 'GameCatalog.cs'), 'MUSITE_TEST_DB'),
     (os.path.join('src', 'MuSite', 'Services', 'ServerLog.cs'), 'MUSITE_TEST_SITE_DB'),
+    (os.path.join('src', 'MuSite', 'Services', 'ServerMetrics.cs'), 'MUSITE_TEST_SITE_DB'),
 ]
 
 

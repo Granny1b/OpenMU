@@ -1,0 +1,222 @@
+@page "/admin/metrics"
+@using MuSite.Charts
+@model MuSite.Pages.Admin.MetricsModel
+@{
+    ViewData["Title"] = "Server health";
+    var live = Model.Live;
+    var cpuNow = MuSite.Pages.Admin.MetricsModel.Now(Model.Cpu);
+    var memNow = MuSite.Pages.Admin.MetricsModel.Now(Model.Memory);
+    var loadNow = MuSite.Pages.Admin.MetricsModel.Now(Model.Load);
+    var percent = new ChartFormat("%", 0, 100);
+}
+
+@* NO INLINE STYLE ATTRIBUTES AND NO SCRIPT ON THIS PAGE. The CSP sets style-src 'self' with no
+   'unsafe-inline' and has no script-src at all, so both are dropped silently. The charts are SVG
+   built on the server (Charts/Chart.cs); hover readouts are SVG <title> elements, which the browser
+   shows natively without a line of JavaScript. *@
+
+<h1>Server health</h1>
+<p class="mu-muted mu-tight">
+    The machine and the game, sampled every 30 seconds. Hover any chart for the value at that moment.
+</p>
+
+@if (Model.TablesMissing)
+{
+    <div class="mu-notice mu-notice--danger">
+        <strong>The metric tables do not exist yet.</strong>
+        <p class="mu-flush">
+            Migrations are copied into the <code>mu-site-migrate</code> image when it is built, so an
+            image built before <code>003_metrics.sql</code> reports success having skipped it. Rebuild
+            it and run it again:
+        </p>
+        <pre class="mu-flat"><code>docker compose build mu-site-migrate
+docker compose run --rm mu-site-migrate</code></pre>
+    </div>
+}
+
+<nav class="mu-chips" aria-label="Time window">
+    @foreach (var window in MuSite.Pages.Admin.MetricsModel.Windows)
+    {
+        var on = window.Hours == Model.Hours;
+        <a class="mu-chip @(on ? "mu-chip--on" : null)" href="@Model.Link(window.Hours)"
+           aria-current="@(on ? "page" : null)">@window.Label</a>
+    }
+</nav>
+
+<div class="mu-stats">
+    <div class="mu-stat">
+        <span class="mu-stat__value @(live.IsUp ? "mu-stat__value--up" : "mu-stat__value--down")">
+            @(live.IsUp ? "Online" : "Offline")
+        </span>
+        <span class="mu-stat__label">Game server</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(live.Players?.ToString() ?? "—")</span>
+        <span class="mu-stat__label">Players now</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(cpuNow is null ? "—" : $"{cpuNow:0}%")</span>
+        <span class="mu-stat__label">Processor</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(memNow is null ? "—" : Model.MemoryTotal > 0 ? $"{memNow:0}%" : MuSite.Pages.Admin.MetricsModel.Bytes(memNow.Value))</span>
+        <span class="mu-stat__label">Memory</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(loadNow is null ? "—" : $"{loadNow:0.00}")</span>
+        <span class="mu-stat__label">Load @(Model.Cores > 0 ? $"of {Model.Cores:0}" : null)</span>
+    </div>
+</div>
+
+@if (!Model.HasHostData)
+{
+    <div class="mu-notice">
+        <strong>No machine measurements have arrived yet.</strong>
+        <p class="mu-flush">
+            The VPS figures come from the <code>vector</code> service. If it has only just been
+            deployed, the first points appear within a minute. Check it with
+            <code>docker compose logs --tail 30 vector</code>.
+        </p>
+    </div>
+}
+
+<div class="mu-cards">
+
+    <section class="mu-card mu-card--wide">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Players online</h2>
+            <span class="mu-card__now">@(live.Players?.ToString() ?? "unknown")</span>
+        </div>
+        @Chart.Line(Model.Players, Model.From, Model.To, Model.Bucket, new ChartFormat(string.Empty), "Players online", full: true)
+        @if (Model.Players.Count == 0)
+        {
+            <p class="mu-card__note">
+                The exact count needs a Viewer API key from OpenMU's admin panel (<em>API keys</em>),
+                set as <code>MUSITE_STATUSAPIKEY</code>. Without one the site can still tell whether
+                the server is up and how loaded it is, but not how many people are on it: OpenMU
+                keeps that number in memory, and the connect server publishes it only as a whole
+                percentage of the player cap &mdash; ten players per percent at the default cap.
+            </p>
+        }
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Processor</h2>
+            <span class="mu-card__now">@(cpuNow is null ? "—" : $"{cpuNow:0}%")</span>
+        </div>
+        @Chart.Line(Model.Cpu, Model.From, Model.To, Model.Bucket, percent, "Processor busy percentage")
+        <p class="mu-card__note">
+            Time not spent idle, across @(Model.Cores > 0 ? $"{Model.Cores:0} cores" : "all cores").
+        </p>
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Memory</h2>
+            <span class="mu-card__now">@(memNow is null ? "—" : Model.MemoryTotal > 0 ? $"{memNow:0}%" : MuSite.Pages.Admin.MetricsModel.Bytes(memNow.Value))</span>
+        </div>
+        @Chart.Line(Model.Memory, Model.From, Model.To, Model.Bucket,
+                    Model.MemoryTotal > 0 ? percent : new ChartFormat(" B"), "Memory in use")
+        @if (Model.MemoryTotal > 0)
+        {
+            <p class="mu-card__note">@MuSite.Pages.Admin.MetricsModel.Bytes(Model.MemoryTotal) installed.</p>
+        }
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Load average</h2>
+            <span class="mu-card__now">@(loadNow is null ? "—" : $"{loadNow:0.00}")</span>
+        </div>
+        @Chart.Line(Model.Load, Model.From, Model.To, Model.Bucket, new ChartFormat(string.Empty, 2), "One minute load average")
+        <p class="mu-card__note">
+            Work waiting, not processor time. Sustained above
+            @(Model.Cores > 0 ? $"{Model.Cores:0}" : "the core count") means the machine cannot keep up.
+        </p>
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Disk</h2>
+            <span class="mu-card__now">@(Model.Disks.Count > 0 ? $"{Model.Disks[0].Used / Model.Disks[0].Total * 100:0}%" : "—")</span>
+        </div>
+        @foreach (var disk in Model.Disks)
+        {
+            @Chart.Meter(disk.Used, disk.Total, disk.Device,
+                $"{MuSite.Pages.Admin.MetricsModel.Bytes(disk.Used)} of {MuSite.Pages.Admin.MetricsModel.Bytes(disk.Total)} used")
+        }
+        @Chart.Line(Model.Disk, Model.From, Model.To, Model.Bucket, percent, "Disk used over time")
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Network in</h2>
+            <span class="mu-card__now">@Rate(MuSite.Pages.Admin.MetricsModel.Now(Model.NetworkIn))</span>
+        </div>
+        @Chart.Line(ToKb(Model.NetworkIn), Model.From, Model.To, Model.Bucket, new ChartFormat(" kB/s", 0), "Network received")
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Network out</h2>
+            <span class="mu-card__now">@Rate(MuSite.Pages.Admin.MetricsModel.Now(Model.NetworkOut))</span>
+        </div>
+        @Chart.Line(ToKb(Model.NetworkOut), Model.From, Model.To, Model.Bucket, new ChartFormat(" kB/s", 0), "Network sent")
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Errors logged</h2>
+            <span class="mu-card__now">@Model.Errors.Sum(point => point.Value).ToString("0")</span>
+        </div>
+        <div class="mu-chart--info">
+            @Chart.Line(Model.Errors, Model.From, Model.To, Model.Bucket, new ChartFormat(string.Empty), "Errors logged")
+        </div>
+        <p class="mu-card__note">
+            Errors and fatals from <a href="/admin/logs?hours=@Model.Hours&amp;level=Error">the server log</a>,
+            over the same window.
+        </p>
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Warnings logged</h2>
+            <span class="mu-card__now">@Model.Warnings.Sum(point => point.Value).ToString("0")</span>
+        </div>
+        <div class="mu-chart--info">
+            @Chart.Line(Model.Warnings, Model.From, Model.To, Model.Bucket, new ChartFormat(string.Empty), "Warnings logged")
+        </div>
+    </section>
+
+    <section class="mu-card">
+        <div class="mu-card__head">
+            <h2 class="mu-card__title">Availability</h2>
+            <span class="mu-card__now">@Availability()</span>
+        </div>
+        <div class="mu-chart--good">
+            @Chart.Line(Model.Availability, Model.From, Model.To, Model.Bucket, percent, "Share of probes that were answered")
+        </div>
+        <p class="mu-card__note">
+            Share of probes the connect server answered. A dip is an outage the players saw.
+        </p>
+    </section>
+
+</div>
+
+@functions {
+    /// <summary>Bytes per second, said the way a person would.</summary>
+    string Rate(double? bytesPerSecond) =>
+        bytesPerSecond is null ? "—" : MuSite.Pages.Admin.MetricsModel.Bytes(bytesPerSecond.Value) + "/s";
+
+    /// <summary>
+    /// Network is charted in kB/s rather than bytes: an axis reading "1400000 B/s" is technically
+    /// right and unreadable, and the y-axis has no room for a unit prefix of its own.
+    /// </summary>
+    IReadOnlyList<MuSite.Services.Point> ToKb(IReadOnlyList<MuSite.Services.Point> series) =>
+        [.. series.Select(point => new MuSite.Services.Point(point.At, point.Value / 1000))];
+
+    /// <summary>Mean availability over the window.</summary>
+    string Availability() =>
+        Model.Availability.Count == 0 ? "—" : $"{Model.Availability.Average(point => point.Value):0.0}%";
+}

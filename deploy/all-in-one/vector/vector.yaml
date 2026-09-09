@@ -36,6 +36,37 @@ sources:
       condition_pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} \['
       timeout_ms: 1000
 
+  # ---- the VPS itself --------------------------------------------------------------------------
+  # "Is the box overworked?" needs numbers the game server never produces, so they are read from the
+  # kernel instead. Two things make this cheap and safe:
+  #
+  #   * /proc inside a container is the HOST's /proc, so cpu, memory and load are the real machine's
+  #     without mounting anything. Verified: memory_total_bytes came back as the host's MemTotal.
+  #   * A Docker volume lives on the host filesystem, so statvfs on /openmu-logs reports the HOST
+  #     disk. That is the number that matters - the one that fills up - and it costs no extra mount.
+  #
+  # Uncurated this source emits 151 rows per scrape, most of it loop devices and per-process
+  # samples. The collectors, the filters below and the vps_wanted transform cut that to about 24.
+  vps:
+    type: host_metrics
+    scrape_interval_secs: 30
+    # No `process` (one row per process - 2313 of them in a 12 second local run) and no `cgroups`
+    # (per-container figures we deliberately did not ask for; it would also need /sys/fs/cgroup).
+    collectors: [cpu, disk, filesystem, load, memory, network, host]
+    disk:
+      devices:
+        excludes: ["loop*", "zram*", "ram*", "dm-*", "sr*"]
+    filesystem:
+      # Real filesystems only. Without this, every tmpfs, cgroup and proc mount reports a series,
+      # and the ones with a zero size divide by zero into a null ratio.
+      filesystems:
+        includes: ["ext2", "ext3", "ext4", "xfs", "btrfs", "zfs"]
+    network:
+      # Loopback is not traffic, and veth/br-/docker interfaces are one per container - they would
+      # swamp the graph with the stack talking to itself.
+      devices:
+        excludes: ["lo", "veth*", "br-*", "docker*", "ifb*"]
+
 transforms:
   parsed:
     type: remap
@@ -92,6 +123,69 @@ transforms:
     inputs: [parsed]
     condition: '!includes(["Debug", "Verbose"], .level)'
 
+  # ---- the VPS series --------------------------------------------------------------------------
+  # host_metrics emits metric events; the postgres sink writes an event's fields as columns. Left
+  # alone, a metric serialises with its value nested under `gauge`/`counter`, which would need a
+  # jsonb column and `(gauge->>'value')::float` in every query. metric_to_log makes the shape
+  # editable, and the remap below flattens it to the four columns the table actually has.
+  vps_log:
+    type: metric_to_log
+    inputs: [vps]
+
+  vps_wanted:
+    type: filter
+    inputs: [vps_log]
+    condition:
+      type: vrl
+      source: |
+        name = to_string(.name) ?? ""
+        if name == "cpu_seconds_total" {
+          # Only the idle counter. CPU busy% is derived from it in SQL (100 - idle delta over
+          # elapsed time over core count); keeping all eight modes per core would be eight times
+          # the rows and tell us nothing more.
+          (to_string(.tags.mode) ?? "") == "idle"
+        } else {
+          includes([
+            "memory_total_bytes", "memory_used_bytes", "memory_available_bytes",
+            "memory_swap_total_bytes", "memory_swap_used_bytes",
+            "load1", "load5", "load15", "logical_cpus", "uptime",
+            "filesystem_total_bytes", "filesystem_used_bytes", "filesystem_free_bytes",
+            "network_receive_bytes_total", "network_transmit_bytes_total",
+            "disk_read_bytes_total", "disk_written_bytes_total"
+          ], name)
+        }
+
+  vps_rows:
+    type: remap
+    inputs: [vps_wanted]
+    source: |
+      .at = .timestamp
+
+      # A metric is a gauge or a counter, never both, and the sink cannot see through the nesting.
+      v = .gauge.value
+      if v == null { v = .counter.value }
+      .value = to_float(v) ?? null
+
+      # One tag separates the series of a metric, and which tag it is depends on the metric: the
+      # core number for cpu, the interface for network, the block device for disk and filesystem.
+      # Filesystems are keyed by DEVICE rather than mountpoint on purpose - the same disk is mounted
+      # into this container more than once (the log volume and vector's own data dir), and keying by
+      # mountpoint would draw the same disk as two identical lines.
+      s = .tags.cpu
+      if s == null { s = .tags.device }
+      if s == null { s = .tags.mountpoint }
+      .scope = to_string(s) ?? ""
+
+      . = {"at": .at, "name": .name, "scope": .scope, "value": .value}
+
+  # A metric whose value did not survive to_float would insert NULL into a NOT NULL column and fail
+  # the whole batch, taking the good rows with it. Vector's filesystem collector emits exactly that
+  # for a zero-sized pseudo-mount.
+  vps_ok:
+    type: filter
+    inputs: [vps_rows]
+    condition: '.value != null'
+
 sinks:
   web_db:
     type: postgres
@@ -103,5 +197,18 @@ sinks:
       timeout_secs: 5
     # Keep trying rather than dropping: a database restart must not lose the log lines that explain
     # why it restarted.
+    request:
+      retry_attempts: 10
+
+  # Same credential and same append-only role as the log shipper: it can add measurements and
+  # neither read nor remove them. Retention is the site's job, as it is for server_log.
+  metrics_db:
+    type: postgres
+    inputs: [vps_ok]
+    endpoint: ${MUSITE_LOG_DSN}
+    table: host_metric
+    batch:
+      max_events: 200
+      timeout_secs: 10
     request:
       retry_attempts: 10

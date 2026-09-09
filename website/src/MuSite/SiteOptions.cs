@@ -39,6 +39,36 @@ public sealed class SiteOptions
     /// </summary>
     public string[] ProbeEndpoints { get; set; } = [];
 
+    /// <summary>
+    /// How many days of VPS measurements and server samples to keep. 0 keeps everything.
+    /// </summary>
+    /// <remarks>
+    /// TWICE THE LONGEST WINDOW THE DASHBOARD OFFERS, which is seven days. Keeping materially more
+    /// than that buys nothing visible and costs on every read: measured on a four core machine, a
+    /// month of measurements is 1.04 million rows and 138 MB, and the same aggregate takes 44 ms
+    /// over seven days against 179 ms over thirty. Raise it if you want a longer capacity trend -
+    /// the cost is roughly 4.6 MB and 35,000 rows per extra day - but nothing on the page will show
+    /// it until a wider window is added too.
+    /// </remarks>
+    public int MetricsRetentionDays { get; set; } = 14;
+
+    /// <summary>
+    /// Full URL of OpenMU's status endpoint, e.g. <c>http://openmu-startup:8080/api/status</c>.
+    /// Empty disables the exact player count; load percentage still comes from the connect server.
+    /// </summary>
+    public string StatusUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// A Viewer API key for <see cref="StatusUrl"/>, created in OpenMU's admin panel under
+    /// /api-keys. THIS IS A CREDENTIAL: it is never logged, and never rendered on a page.
+    /// </summary>
+    /// <remarks>
+    /// Without it the site cannot know the exact number of players online, because OpenMU keeps
+    /// that in memory and the connect server publishes only a truncated percentage of the player
+    /// cap - ten players per percent at the default cap of 1000.
+    /// </remarks>
+    public string StatusApiKey { get; set; } = string.Empty;
+
     /// <summary>CIDRs of the reverse proxy, for X-Forwarded-For to be honoured.</summary>
     public string[] TrustedNetworks { get; set; } = [];
 
