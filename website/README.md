@@ -31,9 +31,13 @@ or an email address. No role has `DELETE` on an account or a character.
 cp .env.example .env && $EDITOR .env         # six DB passwords, MUSITE_ADMINS, MUSITE_OWNER
 
 # OpenMU must have booted at least once - the grants need its schemas to exist.
-psql -U postgres -d openmu -v read_pw="'...'" -v auth_pw="'...'" -v reg_pw="'...'" \
-                           -v app_pw="'...'"  -v own_pw="'...'"  -v log_pw="'...'" \
-                           -f db/01-roles.sql
+# Pass each password RAW - no surrounding quotes. 01-roles.sql uses :'read_pw' inside format(%L),
+# which quotes the value itself; -v read_pw="'secret'" produces PASSWORD '''secret''' and the
+# quotes end up IN the password, so the role never matches what .env says. All six must be passed:
+# psql errors on a variable it was not given, even for a role that already exists.
+psql -U postgres -d openmu -f db/01-roles.sql \
+  -v read_pw="$READ" -v auth_pw="$AUTH" -v reg_pw="$REG" \
+  -v app_pw="$APP"   -v own_pw="$OWN"   -v log_pw="$LOG"
 psql -U postgres -d openmu -f db/01b-grants.sql
 psql -U postgres -d openmu -f db/02-indexes.sql       # watch for the WARNING it may print
 psql -U postgres -d openmu -f db/03-seed-cleanup.sql

@@ -7,6 +7,12 @@
 --     -v read_pw=... -v auth_pw=... -v reg_pw=... -v app_pw=... -v own_pw=... -v log_pw=... \
 --     -f 01-roles.sql
 --
+-- Pass each password RAW. :'read_pw' below already emits a quoted SQL literal, and
+-- format(%L) quotes it again, so -v read_pw="'secret'" yields PASSWORD '''secret''' -
+-- the single quotes end up IN the password and the role stops matching what .env says.
+-- All six must be passed even when five of the roles already exist: psql substitutes the
+-- variables before the WHERE NOT EXISTS is ever evaluated, and errors on one it was not given.
+--
 -- Idempotent: safe to run twice. Contains role creation ONLY - every GRANT lives in 01b-grants.sql,
 -- because grants live in the database catalog and are destroyed when a `-reinit` drops the database.
 --
