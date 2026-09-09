@@ -325,3 +325,10 @@ src/AdminPanel/wwwroot/content/js/app.js.map
 .opencode/
 # Keys which are generated when the server runs locally.
 data-protection-keys/
+
+# Test fixtures under website/tests/fixtures are SOURCE, not output. The rules above ignore *.log
+# and *.txt globally, which silently excluded serilog-sample.txt - a file the log-shipper CI gate
+# reads, so its absence would have failed the build with a missing-file error rather than a bad
+# pattern. Un-ignore the directory explicitly.
+!website/tests/fixtures/
+!website/tests/fixtures/**

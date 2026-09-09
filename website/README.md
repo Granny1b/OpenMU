@@ -10,7 +10,7 @@ stops being an upgrade path and you become a fork maintainer.
 
 ## How it reaches the data
 
-Directly, over five PostgreSQL roles with **column-level** grants (`db/01b-grants.sql`):
+Directly, over six PostgreSQL roles with **column-level** grants (`db/01b-grants.sql`):
 
 | Role | Reads | Used by |
 |---|---|---|
@@ -19,6 +19,7 @@ Directly, over five PostgreSQL roles with **column-level** grants (`db/01b-grant
 | `mu_web_reg` | account columns except the hash; writes new accounts and `State` | registration, ban/unban, admin views |
 | `mu_web_app` | the site's own `openmu_web` database | sessions, news, audit |
 | `mu_web_own` | owns `openmu_web` (DDL only) | the one-shot migrate container |
+| `mu_web_log` | nothing &mdash; `INSERT` on `server_log` only | the Vector log shipper |
 
 `SELECT * FROM data."Account"` fails outright as `mu_web_read`. That is an enforced boundary rather
 than a code-review convention, and it is why a mistake on a ranking page cannot leak a password hash
@@ -27,16 +28,17 @@ or an email address. No role has `DELETE` on an account or a character.
 ## Setup
 
 ```sh
-cp .env.example .env && $EDITOR .env         # five DB passwords, MUSITE_ADMINS, MUSITE_OWNER
+cp .env.example .env && $EDITOR .env         # six DB passwords, MUSITE_ADMINS, MUSITE_OWNER
 
 # OpenMU must have booted at least once - the grants need its schemas to exist.
 psql -U postgres -d openmu -v read_pw="'...'" -v auth_pw="'...'" -v reg_pw="'...'" \
-                           -v app_pw="'...'"  -v own_pw="'...'" -f db/01-roles.sql
+                           -v app_pw="'...'"  -v own_pw="'...'"  -v log_pw="'...'" \
+                           -f db/01-roles.sql
 psql -U postgres -d openmu -f db/01b-grants.sql
 psql -U postgres -d openmu -f db/02-indexes.sql       # watch for the WARNING it may print
 psql -U postgres -d openmu -f db/03-seed-cleanup.sql
 
-docker compose run --rm mu-site-migrate      # creates the openmu_web schema
+docker compose run --rm mu-site-migrate      # creates the openmu_web schema, incl. server_log
 ```
 
 Then verify the boundaries actually hold - the commented block at the end of `db/01b-grants.sql`
@@ -189,6 +191,88 @@ declaration order with no gaps, because the server assigns them by index.
 
 22 of the commands are `IDisabledByDefault` and answer "unknown command" until they are enabled on
 the OpenMU admin panel's Plugins page. The console flags those.
+
+## Server log
+
+`/admin/logs` searches the game server's own log. Nothing about OpenMU changes to make that work.
+
+**How it gets there.** OpenMU logs through Serilog, and the `munique/openmu` image carries only the
+Console and File sinks &mdash; `Serilog.Sinks.Grafana.Loki` is referenced by `src/Dapr/Common`, which
+builds the *distributed* image, not this one. So there is no way to point OpenMU straight at a
+database without rebuilding its image, which would break `docker compose pull`. Instead it keeps
+writing `logs/log.txt` exactly as before, and a [Vector](https://vector.dev) container tails those
+files and appends to `openmu_web.server_log`.
+
+```
+openmu-startup ──writes──▶ openmu-logs volume ──tails──▶ vector ──INSERT──▶ openmu_web.server_log
+                                                                                    │
+                                                                       /admin/logs ─┘  (reads)
+                                                              LogRetentionService ──┘  (prunes)
+```
+
+**It reads the volume, not the Docker socket.** Vector's `docker_logs` source needs
+`/var/run/docker.sock`, and read access to that socket is effectively root on the host &mdash; a
+container that can talk to it can start another one with the host filesystem mounted. A read-only
+bind of the log volume needs no privilege at all.
+
+**The `openmu-logs` volume matters on its own.** Before it existed, `logs/` lived only inside the
+container, so every `docker compose up -d --build` threw away the entire history &mdash; which is
+exactly when you most want to read what happened beforehand.
+
+**What the shipper may do.** `mu_web_log` can `INSERT` into `server_log` and nothing else. It cannot
+read a line back, amend one, or remove one: a shipper able to read the table could exfiltrate
+everything the server ever logged, and one able to delete could cover its own tracks. The site reads
+the table and prunes it; `server_log` is the only table `mu_web_app` may `DELETE` from, because it
+is operational telemetry with a retention window. **`audit_log` keeps its no-DELETE guarantee** and
+remains the record of who did what.
+
+**Retention** is `MUSITE_LOGRETENTIONDAYS`, 14 by default, pruned hourly in batches of 20 000. Set
+it to 0 to keep everything &mdash; on a busy server that eventually fills the disk, and a full disk
+stops PostgreSQL accepting writes and takes the game server down with it.
+
+**Debug and Verbose are dropped by the shipper**, not by OpenMU. OpenMU has 243 `LogDebug` call
+sites against 62 `LogInformation`, so raising the game server's level to chase a bug would otherwise
+start writing several hundred extra call sites into the database. Raise it freely; the pipeline still
+only stores Information and above.
+
+**What is NOT logged.** OpenMU emits no line for a successful login, a completed trade, a ban, or a
+GM command being run &mdash; only for a command that *throws*. No shipping fixes an event nobody
+emits. Adding them means a plugin against one of the 31 plugin points in
+`src/GameLogic/PlugIns/` (`IChatMessageReceivedPlugIn` catches every GM command, since commands
+arrive as chat), and `PlugInManager` does load external assemblies from a `plugins/` folder &mdash;
+though its `Assembly.LoadFile("plugins\\" + name)` call uses a Windows separator on a relative
+path, which `LoadFile` rejects, so that route needs testing on Linux before you rely on it.
+
+### Verifying the pipeline
+
+`tools/verify-log-parse.py` checks the shipper's regex against `tests/fixtures/serilog-sample.txt`,
+which is **real** Serilog output produced with the `outputTemplate` from
+`src/Startup/appsettings.json` verbatim. It reads the pattern out of `vector/vector.yaml` rather
+than keeping a copy, so what is tested is what ships.
+
+That matters because this failure is silent: a pattern that does not match does not error, it files
+everything under level `Unparsed`, and a missing log line looks exactly like nothing having
+happened. The fixture carries the cases that broke a guessed pattern &mdash; an absent
+`SourceContext` renders as empty brackets `[] []` rather than nothing, an `EventId` renders as
+`{ Id = 42, Name = ItemCreated }`, and real messages contain brackets
+(`picked up by player '[GM] Granny' [slot 3]`), so a loose bracket match eats the message.
+
+```bash
+python3 tools/verify-log-parse.py
+```
+
+On the server, check Vector's own view before trusting it:
+
+```bash
+docker compose exec vector vector validate /etc/vector/vector.yaml   # config is well-formed
+docker compose logs --tail=50 vector                                 # parse errors show up here
+docker compose exec -T database psql -U postgres -d openmu_web \
+  -c "SELECT level, count(*) FROM server_log GROUP BY level ORDER BY 2 DESC"
+```
+
+A row count of zero with Vector running usually means the log volume is empty because OpenMU has
+not written since the volume was added; a pile of `Unparsed` rows means the regex needs the
+attention above.
 
 ## Tests
 

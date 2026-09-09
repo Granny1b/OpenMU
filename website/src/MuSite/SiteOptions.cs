@@ -28,6 +28,12 @@ public sealed class SiteOptions
     public int MinPassword { get; set; } = 8;
 
     /// <summary>
+    /// How many days of the game server's log to keep in server_log. 0 keeps everything, which on
+    /// a busy server eventually fills the disk - see <see cref="Services.LogRetentionService"/>.
+    /// </summary>
+    public int LogRetentionDays { get; set; } = 14;
+
+    /// <summary>
     /// host:port pairs the status probe opens a TCP connection to. Configurable because the deploy
     /// variants publish different ports: all-in-one publishes 44405 and 44406, Traefik only 44405.
     /// </summary>
