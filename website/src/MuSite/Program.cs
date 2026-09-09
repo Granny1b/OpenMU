@@ -86,6 +86,7 @@ builder.Services.AddSingleton<LoginAttempts>();
 builder.Services.AddSingleton<AdminActions>();
 builder.Services.AddSingleton<StepUp>();
 builder.Services.AddSingleton<NewsStore>();
+builder.Services.AddScoped<ServerLog>();
 builder.Services.AddHostedService<SessionPurgeService>();
 builder.Services.AddHostedService<BanExpiryService>();
 

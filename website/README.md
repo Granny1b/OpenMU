@@ -203,7 +203,18 @@ the OpenMU admin panel's Plugins page. The console flags those.
 
 ## Server log
 
-`/admin/logs` searches the game server's own log. Nothing about OpenMU changes to make that work.
+`/admin/logs` searches the game server's own log: filter by level, by category, by time window and
+by text, with stack traces expanding inline. Nothing about OpenMU changes to make that work.
+
+The level chips carry counts and deliberately ignore the level filter, so switching between them
+shows what you would get - a chip list that narrowed to the selected level would have no way back.
+The search covers the message **and** the stack trace, because the text an operator pastes in
+("permission denied") is usually in the trace rather than the message. Traces expand with
+`<details>`, which is native HTML: the CSP forbids script entirely, so nothing on this site can be
+made interactive with JavaScript.
+
+There is no full-text index (see `002_server_log.sql` for why), so a search is scoped to the time
+window and a narrower window is a faster search.
 
 **How it gets there.** OpenMU logs through Serilog, and the `munique/openmu` image carries only the
 Console and File sinks &mdash; `Serilog.Sinks.Grafana.Loki` is referenced by `src/Dapr/Common`, which
