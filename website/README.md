@@ -42,6 +42,11 @@ psql -U postgres -d openmu -f db/01b-grants.sql
 psql -U postgres -d openmu -f db/02-indexes.sql       # watch for the WARNING it may print
 psql -U postgres -d openmu -f db/03-seed-cleanup.sql
 
+# --build is NOT optional. Dockerfile.migrate does `COPY db/web/ /migrations/`, so the SQL is
+# BAKED INTO THE IMAGE at build time - an image built before a migration existed will report
+# "openmu_web is up to date" while quietly skipping it. Same for mu-site, which is built from
+# this source tree: without --build it keeps running the code from the last build.
+docker compose build mu-site-migrate mu-site
 docker compose run --rm mu-site-migrate      # creates the openmu_web schema, incl. server_log
 ```
 
