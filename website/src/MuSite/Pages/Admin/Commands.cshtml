@@ -1,0 +1,112 @@
+@page "/admin/commands"
+@model MuSite.Pages.Admin.CommandsModel
+@using MuSite.Game
+@{
+    ViewData["Title"] = "GM commands";
+}
+
+<h1>GM commands</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    Every chat command this server build ships &mdash; @Model.Total in total, @Model.DisabledCount of
+    which are disabled until you enable them on the admin panel's Plugins page.
+</p>
+
+<div class="mu-notice">
+    These run <strong>in the game client</strong>, not here. The website has no channel to the running
+    game server: a signed-in player's characters and inventory are held in memory for the whole
+    session, so anything this site wrote to the database behind that session would be lost or would
+    collide with it. What this page does instead is tell you exactly what to type.
+</div>
+
+<div class="mu-panel">
+    <div class="mu-panel__body">
+        <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div class="mu-field" style="max-width:300px;margin-bottom:0">
+                <label class="mu-label" for="q">Command or description</label>
+                <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
+                       placeholder="e.g. item, ban, monster" autofocus />
+            </div>
+            <div class="mu-field" style="margin-bottom:0">
+                <label class="mu-label" for="gm">
+                    <input id="gm" name="gm" type="checkbox" value="true" checked="@Model.GameMasterOnly" />
+                    Game master only
+                </label>
+            </div>
+            <button class="mu-btn" type="submit">Filter</button>
+        </form>
+
+        @if (Model.Results.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">No match</div>
+                Nothing matches that filter.
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead>
+                        <tr>
+                            <th>Command</th>
+                            <th>Usage</th>
+                            <th>Requires</th>
+                            <th>What it does</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var command in Model.Results)
+                    {
+                        <tr>
+                            <td><code>@command.Command</code></td>
+                            <td>
+                                <code>@command.Usage</code>
+                                @if (command.Args.Count > 0 && !command.SupportsNamedArguments)
+                                {
+                                    <div class="mu-hint">positional only &mdash; give them in order</div>
+                                }
+                            </td>
+                            <td>
+                                @if (command.Status == GmStatus.GameMaster)
+                                {
+                                    <span class="mu-badge mu-badge--gm">Game Master</span>
+                                }
+                                else
+                                {
+                                    <span class="mu-muted">any player</span>
+                                }
+                                @if (command.IsDisabledByDefault)
+                                {
+                                    <div><span class="mu-badge">enable first</span></div>
+                                }
+                            </td>
+                            <td>@command.Description</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="mu-panel">
+    <div class="mu-panel__head"><h2 class="mu-panel__title">How arguments are written</h2></div>
+    <div class="mu-panel__body">
+        <p>
+            Most commands accept <code>name=value</code> pairs in any order, which is what the builders
+            on the Items, Monsters and Maps pages produce. The names are matched
+            <strong>exactly and case-sensitively</strong> &mdash; <code>ancBonuslvl</code> works,
+            <code>ancbonuslvl</code> is silently ignored.
+        </p>
+        <p>
+            Commands marked <em>positional only</em> have no argument names at all. Give their values in
+            the order shown, with no gaps: the server assigns them by position, so a missing middle
+            value shifts everything after it onto the wrong field.
+        </p>
+        <p class="mu-hint">
+            This catalogue is generated from the server source by
+            <code>website/tools/generate-gm-commands.py</code>. Re-run it after upgrading OpenMU.
+        </p>
+    </div>
+</div>

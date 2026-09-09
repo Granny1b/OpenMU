@@ -1,0 +1,146 @@
+@page "/admin/monsters"
+@model MuSite.Pages.Admin.MonstersModel
+@{
+    ViewData["Title"] = "Monsters";
+}
+
+<h1>Monsters</h1>
+<p class="mu-muted" style="margin-top:-8px">
+    Search the game's own monster configuration. Pick one to see every place it spawns naturally and
+    the command to spawn one where you stand.
+</p>
+
+<div class="mu-panel">
+    <div class="mu-panel__body">
+        <form method="get" class="mu-field" style="max-width:320px">
+            <label class="mu-label" for="q">Name or monster number</label>
+            <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
+                   placeholder="e.g. tantallos, or 78" autofocus />
+        </form>
+
+        @if (Model.Results.Count == 0)
+        {
+            <div class="mu-empty">
+                <div class="mu-empty__title">No match</div>
+                @if (Model.Query is null)
+                {
+                    <text>The monster catalogue is empty &mdash; the game configuration may not be installed yet.</text>
+                }
+                else
+                {
+                    <text>Nothing matches &ldquo;@Model.Query&rdquo;.</text>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="mu-tablewrap">
+                <table class="mu-table">
+                    <thead>
+                        <tr>
+                            <th class="mu-table__num">No.</th>
+                            <th>Name</th>
+                            <th class="mu-table__num">Level</th>
+                            <th class="mu-table__num">HP</th>
+                            <th class="mu-table__num">Damage</th>
+                            <th class="mu-table__num">Defense</th>
+                            <th class="mu-table__num">Spawns</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var monster in Model.Results)
+                    {
+                        <tr>
+                            <td class="mu-table__num">@monster.Number</td>
+                            <td>@monster.Designation</td>
+                            <td class="mu-table__num">@(monster.Level > 0 ? monster.Level.ToString() : "—")</td>
+                            <td class="mu-table__num">@(monster.Health > 0 ? monster.Health.ToString("N0") : "—")</td>
+                            <td class="mu-table__num">
+                                @(monster.MaxDamage > 0 ? $"{monster.MinDamage}–{monster.MaxDamage}" : "—")
+                            </td>
+                            <td class="mu-table__num">@(monster.Defense > 0 ? monster.Defense.ToString("N0") : "—")</td>
+                            <td class="mu-table__num">@monster.SpawnAreas</td>
+                            <td>
+                                <a class="mu-btn" href="/admin/monsters?q=@Uri.EscapeDataString(Model.Query ?? string.Empty)&amp;number=@monster.Number">Spawn info</a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@if (Model.SpawnCommand is { } spawnCommand)
+{
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">
+                @(Model.Selected?.Designation ?? "Monster") &mdash; spawn
+            </h2>
+        </div>
+        <div class="mu-panel__body">
+            <div class="mu-field">
+                <label class="mu-label" for="spawn-command">Run this in game, standing where you want it</label>
+                <input class="mu-input" id="spawn-command" type="text" value="@spawnCommand" readonly />
+            </div>
+
+            @if (Model.CommandDisabledByDefault)
+            {
+                <div class="mu-notice mu-notice--warn">
+                    <code>/createmonster</code> is disabled by default. Enable it on the admin panel's
+                    Plugins page, or the game will answer that the command is unknown.
+                </div>
+            }
+
+            <h3 class="mu-label" style="margin-top:16px">Where it spawns on its own</h3>
+            @if (Model.Spawns.Count == 0)
+            {
+                <div class="mu-empty">
+                    <div class="mu-empty__title">No spawn areas</div>
+                    This monster is never placed by the map configuration &mdash; it only appears when
+                    something spawns it, such as an invasion event or the command above.
+                </div>
+            }
+            else
+            {
+                <div class="mu-tablewrap">
+                    <table class="mu-table">
+                        <thead>
+                            <tr>
+                                <th>Map</th>
+                                <th class="mu-table__num">Map no.</th>
+                                <th>Area</th>
+                                <th class="mu-table__num">Quantity</th>
+                                <th>Trigger</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var spawn in Model.Spawns)
+                        {
+                            <tr>
+                                <td>@spawn.MapName</td>
+                                <td class="mu-table__num">@spawn.MapNumber</td>
+                                <td>
+                                    @if (spawn.X1 == spawn.X2 && spawn.Y1 == spawn.Y2)
+                                    {
+                                        <text>@spawn.X1, @spawn.Y1</text>
+                                    }
+                                    else
+                                    {
+                                        <text>@spawn.X1, @spawn.Y1 &ndash; @spawn.X2, @spawn.Y2</text>
+                                    }
+                                </td>
+                                <td class="mu-table__num">@spawn.Quantity</td>
+                                <td>@MuSite.Game.GameEnums.SpawnTrigger.Describe(spawn.SpawnTrigger)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}

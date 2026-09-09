@@ -74,6 +74,7 @@ builder.Services.AddSingleton<SchemaContract>();
 builder.Services.AddHostedService<SchemaContractService>();
 builder.Services.AddSingleton<RoleResolver>();
 builder.Services.AddSingleton<PublicQueries>();
+builder.Services.AddSingleton<GameCatalog>();
 builder.Services.AddSingleton<RankingCache>();
 builder.Services.AddSingleton<GameAccount>();
 builder.Services.AddSingleton<SessionStore>();

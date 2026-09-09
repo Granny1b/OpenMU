@@ -115,3 +115,95 @@ INSERT INTO guild."GuildMember"("Id","GuildId","Status") VALUES
  ('c0000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001',2),
  ('c0000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000001',4),
  ('c0000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000002',1);
+
+-- =================================================================================================
+-- The GM console's reference catalogue, in the `config` schema.
+--
+-- Column TYPES matter here and are copied from
+-- src/Persistence/EntityFramework/Migrations/00000000000000_Initial.cs: every C# `byte` property is
+-- PostgreSQL `smallint`, which Npgsql reports as Int16. A fixture that used `integer` would let a
+-- record declaring `byte` pass here and fail against the real database - which is exactly how the
+-- character page and the news feed both shipped broken.
+-- =================================================================================================
+
+CREATE TABLE config."MonsterDefinition" (
+    "Id" uuid PRIMARY KEY, "Number" smallint NOT NULL, "Designation" text NOT NULL,
+    "MoveRange" smallint NOT NULL DEFAULT 0, "AttackRange" smallint NOT NULL DEFAULT 0,
+    "ViewRange" smallint NOT NULL DEFAULT 0, "Attribute" smallint NOT NULL DEFAULT 0,
+    "NumberOfMaximumItemDrops" integer NOT NULL DEFAULT 0,
+    "NpcWindow" integer NOT NULL DEFAULT 0, "ObjectKind" integer NOT NULL DEFAULT 0,
+    "IntelligenceTypeName" text
+);
+CREATE TABLE config."MonsterAttribute" (
+    "Id" uuid PRIMARY KEY, "MonsterDefinitionId" uuid, "AttributeDefinitionId" uuid,
+    "Value" real NOT NULL
+);
+CREATE TABLE config."MonsterSpawnArea" (
+    "Id" uuid PRIMARY KEY, "MonsterDefinitionId" uuid, "GameMapId" uuid,
+    "X1" smallint NOT NULL, "Y1" smallint NOT NULL, "X2" smallint NOT NULL, "Y2" smallint NOT NULL,
+    "Direction" integer NOT NULL DEFAULT 0, "Quantity" smallint NOT NULL DEFAULT 1,
+    "SpawnTrigger" integer NOT NULL DEFAULT 0, "WaveNumber" smallint NOT NULL DEFAULT 0,
+    "MaximumHealthOverride" integer
+);
+CREATE TABLE config."ItemDefinition" (
+    "Id" uuid PRIMARY KEY, "Number" smallint NOT NULL, "Group" smallint NOT NULL,
+    "Name" text NOT NULL, "Width" smallint NOT NULL DEFAULT 1, "Height" smallint NOT NULL DEFAULT 1,
+    "DropsFromMonsters" boolean NOT NULL DEFAULT true, "IsAmmunition" boolean NOT NULL DEFAULT false,
+    "IsBoundToCharacter" boolean NOT NULL DEFAULT false, "IsQuestItem" boolean NOT NULL DEFAULT false,
+    "DropLevel" smallint NOT NULL DEFAULT 0, "MaximumDropLevel" smallint,
+    "MaximumItemLevel" smallint NOT NULL DEFAULT 0, "Durability" smallint NOT NULL DEFAULT 0,
+    "Value" integer NOT NULL DEFAULT 0, "MaximumSockets" integer NOT NULL DEFAULT 0,
+    "StorageLimitPerCharacter" integer NOT NULL DEFAULT 0, "PetExperienceFormula" text
+);
+
+
+-- GameMapDefinition is declared above with "Number" already; the console additionally reads the
+-- experience rate.
+ALTER TABLE config."GameMapDefinition" ADD COLUMN IF NOT EXISTS "ExpMultiplier" double precision NOT NULL DEFAULT 1;
+
+-- ---- catalogue data ----------------------------------------------------------------------------
+-- Seeded with the hazards the queries must survive: a monster carrying a DUPLICATE level row (MAX
+-- must win and it must stay ONE row), a monster with NO attributes at all (must still list, at
+-- level 0, rather than vanish), a point spawn and a box spawn, and a quest item.
+ ------------------------------------------------------------------------------------
+-- Tarkan is already inserted further up for the character page - reuse it rather than adding a
+-- second row with the same number, which would make every "monsters on map 8" assertion ambiguous.
+UPDATE config."GameMapDefinition" SET "ExpMultiplier" = 1.0
+ WHERE "Id" = '00000000-0000-0000-0000-0000000000f8';
+
+INSERT INTO config."GameMapDefinition" ("Id","Name","Number","ExpMultiplier") VALUES
+  ('a0000000-0000-0000-0000-00000000000a','Icarus',10,1.5)
+ON CONFLICT ("Id") DO NOTHING;
+
+-- Monsters: a golden with stats and two spawn areas, an ordinary one, and one with NO attributes
+-- at all (the hazard: it must still list, at level 0, not vanish).
+INSERT INTO config."MonsterDefinition" ("Id","Number","Designation","ObjectKind") VALUES
+  ('b0000000-0000-0000-0000-000000000001', 78, 'Golden Tantallos', 0),
+  ('b0000000-0000-0000-0000-000000000002', 45, 'Iron Wheel',       0),
+  ('b0000000-0000-0000-0000-000000000003',253, 'Statueless Monster',0);
+
+INSERT INTO config."MonsterAttribute" ("Id","MonsterDefinitionId","AttributeDefinitionId","Value") VALUES
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','560931AD-0901-4342-B7F4-FD2E2FCC0563',104),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','A6C39A5C-295F-415E-A314-5E9F9A748D27',35000),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','3E8D6A02-E973-4AE4-9DF3-CDDC3D3183B3',310),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','8A918EA2-893A-48B2-A684-3E71526CA71F',340),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','EB098C46-60D4-4CA6-BBD4-5B6270A1407B',200),
+  -- A DUPLICATE level row, higher: MAX must win and the monster must stay one row.
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','560931AD-0901-4342-B7F4-FD2E2FCC0563',106),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000002','560931AD-0901-4342-B7F4-FD2E2FCC0563',64),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000002','A6C39A5C-295F-415E-A314-5E9F9A748D27',6500);
+
+INSERT INTO config."MonsterSpawnArea"
+  ("Id","MonsterDefinitionId","GameMapId","X1","Y1","X2","Y2","Quantity","SpawnTrigger") VALUES
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-0000000000f8',120,80,140,100,3,0),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-00000000000a', 60,40, 60,40,1,1),
+  (gen_random_uuid(),'b0000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-0000000000f8', 20,20, 40,40,10,0);
+
+INSERT INTO config."ItemDefinition"
+  ("Id","Group","Number","Name","MaximumItemLevel","MaximumSockets","DropLevel","MaximumDropLevel","Width","Height","Durability","IsQuestItem","DropsFromMonsters") VALUES
+  (gen_random_uuid(),14, 13,'Jewel of Bless',      0,0, 25, NULL,1,1, 1,false,true),
+  (gen_random_uuid(),14, 14,'Jewel of Soul',       0,0, 25, NULL,1,1, 1,false,true),
+  (gen_random_uuid(),14, 16,'Jewel of Life',       0,0, 25, NULL,1,1, 1,false,true),
+  (gen_random_uuid(), 0, 16,'Dragon Slayer',      15,5,118,  130,2,4,50,false,true),
+  (gen_random_uuid(),13, 20,'Quest Scroll',        0,0,  1, NULL,1,2, 1,true, false);
+

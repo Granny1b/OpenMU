@@ -103,4 +103,48 @@ public static class GameEnums
             _ => 3,
         };
     }
+
+    /// <summary>
+    /// SpawnTrigger - src/DataModel/Configuration/MonsterSpawnArea.cs:13. Persisted as an int in
+    /// config."MonsterSpawnArea"."SpawnTrigger".
+    /// </summary>
+    public static class SpawnTrigger
+    {
+        /// <summary>Spawns and respawns on its own.</summary>
+        public const int Automatic = 0;
+
+        /// <summary>Spawns automatically while an event runs.</summary>
+        public const int AutomaticDuringEvent = 1;
+
+        /// <summary>Spawns once when an event starts. This is what golden monsters use.</summary>
+        public const int OnceAtEventStart = 2;
+
+        /// <summary>Spawns automatically during a wave of an event.</summary>
+        public const int AutomaticDuringWave = 3;
+
+        /// <summary>Spawns once at the start of a wave.</summary>
+        public const int OnceAtWaveStart = 4;
+
+        /// <summary>Placed by the event logic rather than by the map.</summary>
+        public const int ManuallyForEvent = 5;
+
+        /// <summary>Wanders rather than holding a spawn point.</summary>
+        public const int Wandering = 6;
+
+        /// <summary>A phrase for the console, explaining what the trigger means in practice.</summary>
+        public static string Describe(int trigger) => trigger switch
+        {
+            Automatic => "Always, respawns",
+            AutomaticDuringEvent => "During an event",
+
+            // The source comment on this value names golden monsters explicitly - which is why a
+            // golden Tantallos is not standing there between invasions.
+            OnceAtEventStart => "Once per event start (golden / boss)",
+            AutomaticDuringWave => "During an event wave",
+            OnceAtWaveStart => "Once per wave start",
+            ManuallyForEvent => "Placed by event logic",
+            Wandering => "Wanders the map",
+            _ => $"Unknown ({trigger})",
+        };
+    }
 }
