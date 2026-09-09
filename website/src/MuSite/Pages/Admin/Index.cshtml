@@ -38,7 +38,7 @@
                 <label class="mu-label" for="q">Login name or character name</label>
                 <input class="mu-input" id="q" name="q" type="search" placeholder="prefix match" />
             </form>
-            <p class="mu-hint" style="margin-bottom:0">
+            <p class="mu-hint mu-flush">
                 <a href="/admin/news">Announcements</a> &middot; <a href="/admin/audit">Audit log</a>
             </p>
         </div>
@@ -47,12 +47,12 @@
     <div class="mu-panel">
         <div class="mu-panel__head"><h2 class="mu-panel__title">GM console</h2></div>
         <div class="mu-panel__body">
-            <p style="margin-top:0">
+            <p class="mu-flat">
                 The game's own reference data, and builders that compose the exact command to run
                 in-game. Nothing here changes the game &mdash; see
                 <a href="/admin/commands">GM commands</a> for why.
             </p>
-            <p style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0">
+            <p class="mu-gap mu-flush">
                 <a class="mu-btn" href="/admin/items">Items</a>
                 <a class="mu-btn" href="/admin/monsters">Monsters</a>
                 <a class="mu-btn" href="/admin/commands">Commands</a>
@@ -66,7 +66,7 @@
             <form method="post">
                 <div class="mu-field">
                     <span class="mu-label">Registration</span>
-                    <p style="margin:0">
+                    <p class="mu-flat">
                         @(Model.RegistrationOpen ? "Open" : "Closed")
                         <button class="mu-btn mu-btn--sm" type="submit" name="toggle" value="registration">
                             @(Model.RegistrationOpen ? "Close" : "Open")
@@ -74,9 +74,9 @@
                     </p>
                     <p class="mu-hint">Closes by itself after @Model.DailyCap accounts in one day.</p>
                 </div>
-                <div class="mu-field" style="margin-bottom:0">
+                <div class="mu-field mu-field--flush">
                     <span class="mu-label">Maintenance notice</span>
-                    <p style="margin:0">
+                    <p class="mu-flat">
                         @(Model.Maintenance ? "Shown" : "Hidden")
                         <button class="mu-btn mu-btn--sm" type="submit" name="toggle" value="maintenance">
                             @(Model.Maintenance ? "Hide" : "Show")

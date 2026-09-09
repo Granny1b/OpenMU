@@ -6,7 +6,7 @@
 }
 
 <h1>@Model.Overview!.LoginName</h1>
-<p class="mu-muted" style="margin-top:-8px">
+<p class="mu-muted mu-tight">
     Registered @Model.Overview!.Registered.ToString("yyyy-MM-dd")
     @if (GameEnums.AccountState.IsGameMaster(Model.Overview!.State))
     {
@@ -36,7 +36,7 @@
                 </div>
             }
 
-            <p style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0">
+            <p class="mu-gap mu-flush">
                 <a class="mu-btn" href="/account/password">Change password</a>
                 <a class="mu-btn" href="/logout">Sign out</a>
             </p>

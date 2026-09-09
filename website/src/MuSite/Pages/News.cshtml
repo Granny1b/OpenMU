@@ -7,7 +7,7 @@
 @if (Model.Single is { } post)
 {
     <h1>@post.Title</h1>
-    <p class="mu-muted" style="margin-top:-8px">
+    <p class="mu-muted mu-tight">
         @post.PublishedAt?.ToString("yyyy-MM-dd") &middot; @post.Author
     </p>
     <div class="mu-panel">

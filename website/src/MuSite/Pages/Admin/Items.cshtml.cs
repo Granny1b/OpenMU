@@ -22,14 +22,59 @@ namespace MuSite.Pages.Admin;
 /// </summary>
 public sealed class ItemsModel(GameCatalog catalog) : PageModel
 {
+    /// <summary>Rows per page. The Season 6 catalogue runs to several hundred definitions, so a
+    /// single capped list silently hid most of them.</summary>
+    private const int PageSize = 50;
+
     /// <summary>The search text.</summary>
     public string? Query { get; private set; }
 
     /// <summary>The item group filter, when one is applied.</summary>
     public int? Group { get; private set; }
 
-    /// <summary>The matching item definitions.</summary>
+    /// <summary>The matching item definitions on this page.</summary>
     public IReadOnlyList<ItemRow> Results { get; private set; } = [];
+
+    /// <summary>How many definitions match in total, across every page.</summary>
+    public int Total { get; private set; }
+
+    /// <summary>1-based page number. NOT called "Page": that would hide PageModel.Page().</summary>
+    public int PageNumber { get; private set; } = 1;
+
+    /// <summary>How many pages the current search fills.</summary>
+    public int PageCount => Math.Max(1, (int)Math.Ceiling(this.Total / (double)PageSize));
+
+    /// <summary>The first row of the current page.</summary>
+    public int FirstRow => this.Total == 0 ? 0 : ((this.PageNumber - 1) * PageSize) + 1;
+
+    /// <summary>The last row of the current page.</summary>
+    public int LastRow => Math.Min(this.PageNumber * PageSize, this.Total);
+
+    /// <summary>A link to another page of the same search, keeping any built item selected.</summary>
+    public string PageLink(int page)
+    {
+        var link = $"/admin/items?page={page}";
+
+        if (!string.IsNullOrEmpty(this.Query))
+        {
+            link += $"&q={Uri.EscapeDataString(this.Query)}";
+        }
+
+        if (this.Group is { } group)
+        {
+            link += $"&group={group}";
+        }
+
+        // Keeping the selection means paging the list does not throw away a half-built command.
+        // Group is always set alongside it - the builder needs both to identify an item - so it is
+        // already on the link from the branch above.
+        if (this.Selected is { } selected)
+        {
+            link += $"&number={selected.Number}";
+        }
+
+        return link;
+    }
 
     /// <summary>The item the builder is configured for.</summary>
     public ItemRow? Selected { get; private set; }
@@ -89,6 +134,7 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
         [FromQuery] string? q,
         [FromQuery] int? group,
         [FromQuery] int? number,
+        [FromQuery] int page,
         [FromQuery] int lvl,
         [FromQuery] int[]? exbit,
         [FromQuery] bool sk,
@@ -101,7 +147,15 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     {
         this.Query = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
         this.Group = group;
-        this.Results = await catalog.ItemsAsync(this.Query, group, 300, cancellationToken).ConfigureAwait(false);
+        this.Total = await catalog.ItemCountAsync(this.Query, group, cancellationToken).ConfigureAwait(false);
+
+        // Clamped both ways: ?page=0 and ?page=9999 are one edit of the address bar away, and an
+        // out-of-range OFFSET returns an empty table that looks like "no items match".
+        this.PageNumber = Math.Clamp(page < 1 ? 1 : page, 1, this.PageCount);
+
+        this.Results = await catalog
+            .ItemsAsync(this.Query, group, (this.PageNumber - 1) * PageSize, PageSize, cancellationToken)
+            .ConfigureAwait(false);
 
         if (group is not { } selectedGroup || number is not { } selectedNumber)
         {

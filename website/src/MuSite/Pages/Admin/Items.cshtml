@@ -5,8 +5,12 @@
     var query = Model.Query ?? string.Empty;
 }
 
+@* NO INLINE STYLE ATTRIBUTES ON THIS PAGE. The site's CSP sets style-src 'self' with no
+   'unsafe-inline', so the browser drops them silently - the first version of this page shipped
+   with 24 and every one was dead. Layout lives in mu.css. *@
+
 <h1>Items</h1>
-<p class="mu-muted" style="margin-top:-8px">
+<p class="mu-muted mu-tight">
     Search the game's item definitions, then build an <code>/item</code> command. The command drops the
     item on the ground next to you &mdash; stand by the player and they can pick it up.
 </p>
@@ -23,10 +27,9 @@
                 <input type="hidden" name="group" value="@selected.Group" />
                 <input type="hidden" name="number" value="@selected.Number" />
 
-                <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
-
+                <div class="mu-row mu-row--top">
                     @* ---- item level ------------------------------------------------------- *@
-                    <div class="mu-field" style="max-width:130px">
+                    <div class="mu-field mu-field--xs">
                         <label class="mu-label" for="lvl">Level</label>
                         @if (selected.MaximumItemLevel > 0)
                         {
@@ -42,29 +45,35 @@
                         else
                         {
                             <input name="lvl" type="hidden" value="0" />
-                            <p class="mu-hint" style="margin:0">Cannot be upgraded.</p>
+                            <p class="mu-hint mu-flush">Fixed at +0.</p>
                         }
                     </div>
 
                     @* ---- skill and luck --------------------------------------------------- *@
-                    <div class="mu-field">
+                    <div class="mu-field mu-field--md">
                         <span class="mu-label">Extras</span>
-                        <label style="display:block">
-                            <input id="sk" name="sk" type="checkbox" value="true" checked="@(Model.Requested?.Skill ?? false)" />
-                            Skill
-                            @if (selected.SkillNumber is null)
-                            {
-                                <span class="mu-muted">&mdash; this item has no skill, so this does nothing</span>
-                            }
-                            else if (Model.ExcellentOptions.Count > 0)
-                            {
-                                <span class="mu-muted">&mdash; any excellent option grants it anyway</span>
-                            }
-                        </label>
-                        <label style="display:block">
-                            <input id="lu" name="lu" type="checkbox" value="true" checked="@(Model.Requested?.Luck ?? false)" />
-                            Luck <span class="mu-muted">&mdash; +5% critical damage chance</span>
-                        </label>
+                        <div class="mu-checklist">
+                            <label class="mu-check">
+                                <input name="sk" type="checkbox" value="true" checked="@(Model.Requested?.Skill ?? false)" />
+                                <span class="mu-check__text">
+                                    Skill
+                                    @if (selected.SkillNumber is null)
+                                    {
+                                        <span class="mu-muted">&mdash; this item has none</span>
+                                    }
+                                    else if (Model.ExcellentOptions.Count > 0)
+                                    {
+                                        <span class="mu-muted">&mdash; any excellent option grants it anyway</span>
+                                    }
+                                </span>
+                            </label>
+                            <label class="mu-check">
+                                <input name="lu" type="checkbox" value="true" checked="@(Model.Requested?.Luck ?? false)" />
+                                <span class="mu-check__text">
+                                    Luck <span class="mu-muted">&mdash; +5% critical damage chance</span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 
@@ -76,29 +85,34 @@
                     <span class="mu-label">Excellent options</span>
                     @if (Model.ExcellentOptions.Count == 0)
                     {
-                        <p class="mu-hint" style="margin:0">
+                        <p class="mu-hint mu-flush">
                             @selected.Name has no excellent options configured &mdash; excellent applies to
                             weapons, armour and shields.
                         </p>
                     }
                     else
                     {
-                        <p class="mu-hint" style="margin:0 0 6px">
-                            Tick what the item should have. Each is worth a value, and they are added
-                            together into <code>ex=</code> &mdash; which is why the same <code>ex</code>
-                            means a different bonus on a weapon than on a shield.
+                        <p class="mu-hint mu-hint--tight">
+                            Tick what the item should have. Each is worth a value; ticked ones are added up
+                            into <code>ex=</code>, which is why the same <code>ex</code> means a different
+                            bonus on a weapon than on a shield.
                         </p>
-                        <div>
+                        <div class="mu-checklist">
                             @foreach (var option in Model.ExcellentOptions)
                             {
                                 var ticked = ((Model.Requested?.ExcellentNumber ?? 0) & option.BitValue) != 0;
-                                <label style="display:block">
+                                <label class="mu-check">
                                     <input name="exbit" type="checkbox" value="@option.BitValue" checked="@ticked" />
-                                    @OptionText.Describe(option)
-                                    <span class="mu-muted">&mdash; option @option.Number, worth @option.BitValue</span>
+                                    <span class="mu-check__no">@option.Number</span>
+                                    <span class="mu-check__text">@OptionText.Describe(option)</span>
+                                    <span class="mu-check__worth">worth @option.BitValue</span>
                                 </label>
                             }
                         </div>
+                        @if (Model.Requested is { ExcellentNumber: > 0 } built)
+                        {
+                            <p class="mu-total">Last built as <strong>ex=@built.ExcellentNumber</strong>.</p>
+                        }
                     }
                 </div>
 
@@ -110,18 +124,18 @@
                     <span class="mu-label">Option</span>
                     @if (Model.OptIsBitField)
                     {
-                        <p class="mu-hint" style="margin:0 0 6px">
+                        <p class="mu-hint mu-hint--tight">
                             The Dinorant is the one item whose <code>opt</code> is a set of switches rather
                             than a level. Tick what it should have.
                         </p>
-                        <div>
+                        <div class="mu-checklist">
                             @foreach (var (bit, option) in Model.DinorantOptions)
                             {
                                 var ticked = ((Model.Requested?.Opt ?? 0) & bit) != 0;
-                                <label style="display:block">
+                                <label class="mu-check">
                                     <input name="optbit" type="checkbox" value="@bit" checked="@ticked" />
-                                    @OptionText.Describe(option)
-                                    <span class="mu-muted">&mdash; worth @bit</span>
+                                    <span class="mu-check__text">@OptionText.Describe(option)</span>
+                                    <span class="mu-check__worth">worth @bit</span>
                                 </label>
                             }
                         </div>
@@ -129,31 +143,30 @@
                     else if (Model.OptionLevels.Count == 0)
                     {
                         <input name="opt" type="hidden" value="0" />
-                        <p class="mu-hint" style="margin:0">
+                        <p class="mu-hint mu-flush">
                             @selected.Name has no ordinary option configured, so there is nothing to add.
                         </p>
                     }
                     else
                     {
-                        <select class="mu-input" style="max-width:420px" id="opt" name="opt">
-                            <option value="0" selected="@((Model.Requested?.Opt ?? 0) == 0)">None</option>
-                            @foreach (var level in Model.OptionLevels)
-                            {
-                                <option value="@level.Level" selected="@((Model.Requested?.Opt ?? 0) == level.Level)">
-                                    @OptionText.Describe(level) (level @level.Level)
-                                </option>
-                            }
-                        </select>
-                        <div>
-                            @if (Model.OptionIsAmbiguous)
-                            {
-                                <p class="mu-hint" style="margin:6px 0 0">
-                                    This item has more than one ordinary option and the command applies
-                                    whichever the server lists first, so the one you get may not be the one
-                                    you picked.
-                                </p>
-                            }
+                        <div class="mu-field--lg">
+                            <select class="mu-input" id="opt" name="opt">
+                                <option value="0" selected="@((Model.Requested?.Opt ?? 0) == 0)">None</option>
+                                @foreach (var level in Model.OptionLevels)
+                                {
+                                    <option value="@level.Level" selected="@((Model.Requested?.Opt ?? 0) == level.Level)">
+                                        @OptionText.Describe(level) (level @level.Level)
+                                    </option>
+                                }
+                            </select>
                         </div>
+                        @if (Model.OptionIsAmbiguous)
+                        {
+                            <p class="mu-hint">
+                                This item has more than one ordinary option and the command applies whichever
+                                the server lists first, so the one you get may not be the one you picked.
+                            </p>
+                        }
                     }
                 </div>
 
@@ -166,9 +179,7 @@
                     @if (Model.AncientSets.Count == 0)
                     {
                         <input name="anc" type="hidden" value="0" />
-                        <p class="mu-hint" style="margin:0">
-                            @selected.Name is not part of an ancient set.
-                        </p>
+                        <p class="mu-hint mu-flush">@selected.Name is not part of an ancient set.</p>
                     }
                     else
                     {
@@ -184,38 +195,42 @@
                             ? "+" + OptionText.Number(two) + " " + bonusName
                             : bonusName;
 
-                        <select class="mu-input" style="max-width:420px" id="anc" name="anc">
-                            <option value="0" selected="@(chosenAncient == 0)">Not ancient</option>
-                            @foreach (var set in Model.AncientSets)
-                            {
-                                <option value="@set.Discriminator" selected="@(chosenAncient == set.Discriminator)">
-                                    @set.SetName (anc=@set.Discriminator)
-                                </option>
-                            }
-                        </select>
-
-                        <div style="margin-top:10px">
-                            <span class="mu-label">Ancient bonus</span>
-                            <select class="mu-input" style="max-width:420px" id="ancLvl" name="ancLvl">
-                                <option value="1" selected="@(chosenLevel == 1)">Level 1 &mdash; @bonusAtOne</option>
-                                <option value="2" selected="@(chosenLevel == 2)">Level 2 &mdash; @bonusAtTwo</option>
-                            </select>
-                            <p class="mu-hint" style="margin:6px 0 0">
-                                The bonus is on the item itself. The set's own options need
-                                @chosenSet.MinimumItemCount of its @chosenSet.ItemsInSet pieces worn together.
-                            </p>
+                        <div class="mu-row mu-row--top">
+                            <div class="mu-field mu-field--md mu-field--flush">
+                                <label class="mu-label" for="anc">Set</label>
+                                <select class="mu-input" id="anc" name="anc">
+                                    <option value="0" selected="@(chosenAncient == 0)">Not ancient</option>
+                                    @foreach (var set in Model.AncientSets)
+                                    {
+                                        <option value="@set.Discriminator" selected="@(chosenAncient == set.Discriminator)">
+                                            @set.SetName (anc=@set.Discriminator)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mu-field mu-field--md mu-field--flush">
+                                <label class="mu-label" for="ancLvl">Bonus</label>
+                                <select class="mu-input" id="ancLvl" name="ancLvl">
+                                    <option value="1" selected="@(chosenLevel == 1)">Level 1 &mdash; @bonusAtOne</option>
+                                    <option value="2" selected="@(chosenLevel == 2)">Level 2 &mdash; @bonusAtTwo</option>
+                                </select>
+                            </div>
                         </div>
+                        <p class="mu-hint">
+                            The bonus is on the item itself. The set's own options need
+                            @chosenSet.MinimumItemCount of its @chosenSet.ItemsInSet pieces worn together.
+                        </p>
                     }
                 </div>
 
-                <button class="mu-btn" type="submit">Build command</button>
+                <button class="mu-btn mu-btn--primary" type="submit">Build command</button>
             </form>
 
             @if (Model.Problems.Count > 0)
             {
-                <div class="mu-notice mu-notice--warn">
+                <div class="mu-notice mu-notice--warn mu-spaced">
                     <strong>No command built.</strong>
-                    <ul style="margin:8px 0 0">
+                    <ul class="mu-listreset">
                         @foreach (var problem in Model.Problems)
                         {
                             <li>@problem</li>
@@ -225,9 +240,9 @@
             }
             else if (Model.Command is { } command)
             {
-                <div class="mu-field" style="margin-top:16px">
+                <div class="mu-field mu-spaced">
                     <label class="mu-label" for="item-command">Run this in game</label>
-                    <input class="mu-input" id="item-command" type="text" value="@command" readonly />
+                    <input class="mu-input mu-mono" id="item-command" type="text" value="@command" readonly />
                 </div>
                 <p class="mu-hint">
                     Only the options you changed are included &mdash; the server defaults the rest, and a
@@ -237,7 +252,7 @@
 
             @if (Model.CommandDisabledByDefault)
             {
-                <div class="mu-notice mu-notice--warn">
+                <div class="mu-notice mu-notice--warn mu-spaced">
                     <code>/item</code> is disabled by default. Enable it on the admin panel's Plugins page.
                 </div>
             }
@@ -250,13 +265,13 @@
         <h2 class="mu-panel__title">@(Model.Selected is null ? "Find an item" : "Pick a different item")</h2>
     </div>
     <div class="mu-panel__body">
-        <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-            <div class="mu-field" style="max-width:280px;margin-bottom:0">
+        <form method="get" class="mu-row">
+            <div class="mu-field mu-field--md mu-field--flush">
                 <label class="mu-label" for="q">Item name</label>
                 <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
                        placeholder="e.g. jewel of bless" autofocus="@(Model.Selected is null)" />
             </div>
-            <div class="mu-field" style="max-width:140px;margin-bottom:0">
+            <div class="mu-field mu-field--xs mu-field--flush">
                 <label class="mu-label" for="group">Group</label>
                 <input class="mu-input" id="group" name="group" type="number" min="0" max="15"
                        value="@(Model.Group?.ToString() ?? string.Empty)" placeholder="any" />
@@ -317,6 +332,30 @@
                     </tbody>
                 </table>
             </div>
+        }
+
+        @if (Model.PageCount > 1)
+        {
+            <div class="mu-pager">
+                @if (Model.PageNumber > 1)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(1)">&laquo; First</a>
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber - 1)">&lsaquo; Previous</a>
+                }
+                <span class="mu-muted">
+                    @Model.FirstRow&ndash;@Model.LastRow of @Model.Total &middot;
+                    page @Model.PageNumber of @Model.PageCount
+                </span>
+                @if (Model.PageNumber < Model.PageCount)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber + 1)">Next &rsaquo;</a>
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageCount)">Last &raquo;</a>
+                }
+            </div>
+        }
+        else if (Model.Total > 0)
+        {
+            <p class="mu-hint">@Model.Total match@(Model.Total == 1 ? "" : "es").</p>
         }
     </div>
 </div>

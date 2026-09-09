@@ -66,8 +66,58 @@ public sealed class ItemBuilderTests : IAsyncLifetime
         int anc = 0, int ancLvl = 0)
     {
         var page = new ItemsModel(this._catalog);
-        await page.OnGetAsync(null, group, number, lvl, exbit, sk, lu, opt, optbit, anc, ancLvl, default);
+        await page.OnGetAsync(null, group, number, 1, lvl, exbit, sk, lu, opt, optbit, anc, ancLvl, default);
         return page;
+    }
+
+    [SkippableFact]
+    public async Task PagingReportsTheWholeCatalogueNotJustThePageOnScreen()
+    {
+        Skip.IfNot(Enabled);
+
+        var page = new ItemsModel(this._catalog);
+        await page.OnGetAsync(null, null, null, 1, 0, null, false, false, 0, null, 0, 0, default);
+
+        Assert.Equal(6, page.Total);
+        Assert.Equal(6, page.Results.Count);
+        Assert.Equal(1, page.PageNumber);
+        Assert.Equal(1, page.PageCount);
+        Assert.Equal(1, page.FirstRow);
+        Assert.Equal(6, page.LastRow);
+    }
+
+    [SkippableTheory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(9999)]
+    public async Task APageNumberOutsideTheRangeIsClampedRatherThanShowingNothing(int requested)
+    {
+        Skip.IfNot(Enabled);
+
+        // ?page=0 and ?page=9999 are one edit of the address bar away, and an out-of-range OFFSET
+        // returns an empty table that reads as "no items match".
+        var page = new ItemsModel(this._catalog);
+        await page.OnGetAsync(null, null, null, requested, 0, null, false, false, 0, null, 0, 0, default);
+
+        Assert.InRange(page.PageNumber, 1, page.PageCount);
+        Assert.NotEmpty(page.Results);
+    }
+
+    [SkippableFact]
+    public async Task PagingKeepsTheSearchAndTheItemBeingBuilt()
+    {
+        Skip.IfNot(Enabled);
+
+        // Paging the list must not throw away a half-built command, or the builder closes under you.
+        var page = new ItemsModel(this._catalog);
+        await page.OnGetAsync("dragon", 0, 16, 1, 0, [4], false, false, 0, null, 0, 0, default);
+
+        var link = page.PageLink(2);
+
+        Assert.Contains("page=2", link, StringComparison.Ordinal);
+        Assert.Contains("q=dragon", link, StringComparison.Ordinal);
+        Assert.Contains("group=0", link, StringComparison.Ordinal);
+        Assert.Contains("number=16", link, StringComparison.Ordinal);
     }
 
     [SkippableFact]

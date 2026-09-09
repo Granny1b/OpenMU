@@ -5,7 +5,7 @@
 }
 
 <h1>Monsters</h1>
-<p class="mu-muted" style="margin-top:-8px">
+<p class="mu-muted mu-tight">
     Search the game's own monster configuration. Pick one to see every place it spawns naturally and
     the command to spawn one where you stand.
 </p>
@@ -32,7 +32,7 @@
                 </div>
             }
 
-            <h3 class="mu-label" style="margin-top:16px">Where it spawns on its own</h3>
+            <h3 class="mu-label mu-spaced">Where it spawns on its own</h3>
             @if (Model.Spawns.Count == 0)
             {
                 <div class="mu-empty">
@@ -87,7 +87,7 @@
         <h2 class="mu-panel__title">@(Model.Selected is null ? "Find a monster" : "Pick a different monster")</h2>
     </div>
     <div class="mu-panel__body">
-        <form method="get" class="mu-field" style="max-width:320px">
+        <form method="get" class="mu-field mu-field--md">
             <label class="mu-label" for="q">Name or monster number</label>
             <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
                    placeholder="e.g. tantallos, or 78" autofocus />
@@ -144,6 +144,30 @@
                     </tbody>
                 </table>
             </div>
+        }
+
+        @if (Model.PageCount > 1)
+        {
+            <div class="mu-pager">
+                @if (Model.PageNumber > 1)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(1)">&laquo; First</a>
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber - 1)">&lsaquo; Previous</a>
+                }
+                <span class="mu-muted">
+                    @Model.FirstRow&ndash;@Model.LastRow of @Model.Total &middot;
+                    page @Model.PageNumber of @Model.PageCount
+                </span>
+                @if (Model.PageNumber < Model.PageCount)
+                {
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageNumber + 1)">Next &rsaquo;</a>
+                    <a class="mu-btn mu-btn--sm" href="@Model.PageLink(Model.PageCount)">Last &raquo;</a>
+                }
+            </div>
+        }
+        else if (Model.Total > 0)
+        {
+            <p class="mu-hint">@Model.Total match@(Model.Total == 1 ? "" : "es").</p>
         }
     </div>
 </div>

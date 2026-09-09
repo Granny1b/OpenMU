@@ -22,7 +22,7 @@
             </div>
             @if (!string.IsNullOrWhiteSpace(Model.ClientUrl))
             {
-                <p style="margin-top:16px;margin-bottom:0">
+                <p class="mu-spaced mu-flush">
                     <a class="mu-btn mu-btn--primary" href="@Model.ClientUrl" rel="noopener">Download the client</a>
                 </p>
             }
@@ -32,7 +32,7 @@
     <div class="mu-panel">
         <div class="mu-panel__head"><h2 class="mu-panel__title">Setup</h2></div>
         <div class="mu-panel__body">
-            <ol style="margin:0 0 12px;padding-left:1.2em">
+            <ol class="mu-list">
                 <li>Create an account on this site.</li>
                 <li>Unpack the client somewhere it can write files &mdash; not Program Files.</li>
                 <li>Start the launcher, enter <span class="mu-mono">@Model.ConnectHost</span>, and pick <span class="mu-mono">main.exe</span>.</li>
