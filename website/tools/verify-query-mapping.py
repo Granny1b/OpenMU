@@ -58,8 +58,9 @@ EXPECTED_CLR = {
     'inet': 'IPAddress',
 
     # Npgsql 6 changed this one from DateTimeOffset to DateTime. MuSite registers a
-    # DateTimeOffsetHandler so both are accepted; see Data/DateTimeOffsetHandler.cs.
-    'timestamp with time zone': 'DateTime',
+    # DateTimeOffsetHandler so BOTH really do work; see Data/DateTimeOffsetHandler.cs. A value may
+    # be a tuple when more than one declaration is genuinely correct.
+    'timestamp with time zone': ('DateTime', 'DateTimeOffset'),
 }
 
 # Stand-ins for query parameters. A new parameter needs an entry here or its query is skipped
@@ -81,6 +82,11 @@ PARAMETERS = {
     # bit-field options apart from its levelled one.
     '@excellentType': "'6487C498-58E0-48E5-B409-35D7598313FC'::uuid",
     '@optionType': "'F193F91E-86D7-4456-ADD8-A3667E731303'::uuid",
+
+    # ServerLog, over the site's own database.
+    '@hours': '24',
+    '@level': "''",
+    '@source': "''",
 }
 
 
@@ -139,23 +145,31 @@ def columns(sql, index, connection):
     return [line.split('|') for line in result.stdout.strip().split('\n') if line]
 
 
-def main():
-    connection = os.environ.get('MUSITE_TEST_DB')
-    if not connection:
-        print('set MUSITE_TEST_DB to a libpq connection string', file=sys.stderr)
-        return 2
+# Each file is checked against the database its queries actually run on. GameCatalog reads the
+# game's schema as mu_web_read; ServerLog reads the site's own openmu_web.
+TARGETS = [
+    (os.path.join('src', 'MuSite', 'Data', 'GameCatalog.cs'), 'MUSITE_TEST_DB'),
+    (os.path.join('src', 'MuSite', 'Services', 'ServerLog.cs'), 'MUSITE_TEST_SITE_DB'),
+]
 
-    # Npgsql keywords are not libpq keywords; translate the few that differ.
-    libpq = (connection.replace('Host=', 'host=').replace('Port=', 'port=')
-             .replace('Username=', 'user=').replace('Password=', 'password=')
-             .replace('Database=', 'dbname=').replace(';', ' '))
 
-    path = os.path.join(ROOT, 'src', 'MuSite', 'Data', 'GameCatalog.cs')
-    src = open(path, encoding='utf-8').read()
+def libpq_of(connection):
+    """Npgsql keywords are not libpq keywords; translate the few that differ."""
+    return (connection.replace('Host=', 'host=').replace('Port=', 'port=')
+            .replace('Username=', 'user=').replace('Password=', 'password=')
+            .replace('Database=', 'dbname=').replace(';', ' '))
+
+
+def check(path, connection, offset):
+    """Returns (failures, queries checked)."""
+    src = open(os.path.join(ROOT, path), encoding='utf-8').read()
     known = records(src)
+    libpq = libpq_of(connection)
 
     failures = 0
-    for index, (sql, record) in enumerate(queries(src)):
+    pairs = queries(src)
+    for position, (sql, record) in enumerate(pairs):
+        index = offset + position
         if record not in known:
             print(f'{record:<14} SKIPPED: no record definition found in this file')
             failures += 1
@@ -178,18 +192,41 @@ def main():
             want = EXPECTED_CLR.get(ctype)
             if want is None:
                 problems.append(f'UNKNOWN TYPE: {cname} is {ctype}; add it to EXPECTED_CLR')
-            elif ptype.rstrip('?') != want:
-                problems.append(
-                    f'TYPE: {pname} declared {ptype} but {cname} is {ctype}, '
-                    f'which Npgsql reports as {want}')
+            else:
+                allowed = want if isinstance(want, tuple) else (want,)
+                if ptype.rstrip('?') not in allowed:
+                    problems.append(
+                        f'TYPE: {pname} declared {ptype} but {cname} is {ctype}, '
+                        f'which Npgsql reports as {" or ".join(allowed)}')
 
-        print(f'{record:<14} {"ok" if not problems else "FAIL"}')
+        print(f'  {record:<20} {"ok" if not problems else "FAIL"}')
         for problem in problems:
             print(f'      {problem}')
         failures += bool(problems)
 
+    return failures, len(pairs)
+
+
+def main():
+    failures = 0
+    checked = 0
+
+    for path, variable in TARGETS:
+        connection = os.environ.get(variable)
+        if not connection:
+            print(f'{path}: SKIPPED - {variable} is not set')
+            failures += 1
+            continue
+
+        print(f'{path}  ({variable})')
+        # The temp-view names are numbered across all targets so two files cannot collide.
+        problems, count = check(path, connection, checked)
+        failures += problems
+        checked += count
+
     print()
-    print('every query maps' if not failures else f'{failures} query/record mismatches')
+    print(f'every one of {checked} queries maps' if not failures
+          else f'{failures} query/record mismatch(es)')
     return 0 if not failures else 1
 
 

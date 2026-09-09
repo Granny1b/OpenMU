@@ -1,0 +1,209 @@
+@page "/admin/logs"
+@model MuSite.Pages.Admin.LogsModel
+@{
+    ViewData["Title"] = "Server log";
+    var filter = Model.Filter;
+    var matched = Model.Levels.Sum(l => l.Lines);
+}
+
+@* NO INLINE STYLE ATTRIBUTES AND NO SCRIPT ON THIS PAGE. The CSP sets style-src 'self' with no
+   'unsafe-inline' and no script-src at all, so both are silently dropped. Stack traces expand with
+   <details>, which is native HTML and needs neither. *@
+
+<h1>Server log</h1>
+<p class="mu-muted mu-tight">
+    What the game server logged, searchable. Filled by the log shipper from OpenMU's own
+    <code>logs/log.txt</code> &mdash; the raw files are still browsable in the OpenMU admin panel
+    under <em>Log files</em>.
+</p>
+
+@if (Model.TableMissing)
+{
+    <div class="mu-notice mu-notice--danger">
+        <strong>There is no <code>server_log</code> table.</strong>
+        <p class="mu-flush">
+            The migrations are copied into the <code>mu-site-migrate</code> image when it is built, so
+            an image built before <code>002_server_log.sql</code> existed reports success having
+            skipped it. Rebuild it and run it again:
+        </p>
+        <pre class="mu-trace">docker compose build mu-site-migrate
+docker compose run --rm mu-site-migrate</pre>
+    </div>
+}
+else
+{
+    <div class="mu-panel">
+        <div class="mu-panel__head"><h2 class="mu-panel__title">Filter</h2></div>
+        <div class="mu-panel__body">
+            <div class="mu-field">
+                <span class="mu-label">Window</span>
+                <div class="mu-chips">
+                    @foreach (var (hours, label) in MuSite.Pages.Admin.LogsModel.Windows)
+                    {
+                        var on = filter.Hours == hours;
+                        <a class="mu-btn mu-btn--sm @(on ? "mu-chip--on" : null)" href="@Model.Link(hours: hours)">@label</a>
+                    }
+                </div>
+            </div>
+
+            <div class="mu-field">
+                <span class="mu-label">Level</span>
+                @if (Model.Levels.Count == 0)
+                {
+                    <p class="mu-hint mu-flush">Nothing logged in this window.</p>
+                }
+                else
+                {
+                    <div class="mu-chips">
+                        <a class="mu-btn mu-btn--sm @(filter.Level is null ? "mu-chip--on" : null)"
+                           href="@Model.Link(level: string.Empty)">All @matched</a>
+                        @foreach (var entry in Model.Levels)
+                        {
+                            var on = string.Equals(filter.Level, entry.Level, StringComparison.Ordinal);
+                            <a class="mu-btn mu-btn--sm @(on ? "mu-chip--on" : null)"
+                               href="@Model.Link(level: entry.Level)">@entry.Level @entry.Lines</a>
+                        }
+                    </div>
+                }
+            </div>
+
+            <form method="get" class="mu-row">
+                <input type="hidden" name="hours" value="@filter.Hours" />
+                @if (filter.Level is { } keptLevel)
+                {
+                    <input type="hidden" name="level" value="@keptLevel" />
+                }
+
+                <div class="mu-field mu-field--lg mu-field--flush">
+                    <label class="mu-label" for="source">Category</label>
+                    <select class="mu-input" id="source" name="source">
+                        <option value="" selected="@(filter.Source is null)">All categories</option>
+                        @foreach (var entry in Model.Sources)
+                        {
+                            var on = string.Equals(filter.Source, entry.Source, StringComparison.Ordinal);
+                            <option value="@entry.Source" selected="@on">@entry.Source (@entry.Lines)</option>
+                        }
+                    </select>
+                </div>
+                <div class="mu-field mu-field--md mu-field--flush">
+                    <label class="mu-label" for="q">Message contains</label>
+                    <input class="mu-input" id="q" name="q" type="search" value="@filter.Search"
+                           placeholder="e.g. permission denied" />
+                </div>
+                <button class="mu-btn" type="submit">Search</button>
+            </form>
+
+            <p class="mu-hint">
+                The search covers the message and the stack trace, and is scoped to the window above
+                &mdash; there is no full-text index, so a narrower window is a faster search.
+            </p>
+        </div>
+    </div>
+
+    <div class="mu-panel">
+        <div class="mu-panel__head">
+            <h2 class="mu-panel__title">
+                @if (Model.Total == 0)
+                {
+                    <text>No matching lines</text>
+                }
+                else
+                {
+                    <text>@Model.FirstRow&ndash;@Model.LastRow of @Model.Total</text>
+                }
+            </h2>
+        </div>
+        <div class="mu-panel__body">
+            @if (Model.Entries.Count == 0)
+            {
+                @* Which message depends on whether anything was NARROWED, not on the level counts:
+                   those respect the search, so a search that matches nothing empties them and made
+                   this claim "no lines at all in this window" while 132 sat behind it. *@
+                <div class="mu-empty">
+                    <div class="mu-empty__title">Nothing to show</div>
+                    @if (Model.Filtered)
+                    {
+                        <text>Nothing matches those filters. Widen the window or clear the search.</text>
+                    }
+                    else
+                    {
+                        <text>
+                            No lines at all in this window. The shipper reads from the END of the log
+                            file, so nothing appears until the server writes something after it started.
+                        </text>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="mu-tablewrap">
+                    <table class="mu-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Level</th>
+                                <th>Category</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var entry in Model.Entries)
+                        {
+                            <tr>
+                                <td>@entry.At.ToLocalTime().ToString("dd MMM HH:mm:ss")</td>
+                                <td><span class="mu-lvl mu-lvl--@entry.Level.ToLowerInvariant()">@entry.Level</span></td>
+                                <td>
+                                    @if (entry.Source is { } source)
+                                    {
+                                        <a class="mu-src" href="@Model.Link(source: source)">@Shorten(source)</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="mu-src">&mdash;</span>
+                                    }
+                                </td>
+                                <td class="mu-logmsg">
+                                    @entry.Message
+                                    @if (entry.Exception is { } trace)
+                                    {
+                                        <details>
+                                            <summary class="mu-more">Stack trace</summary>
+                                            <pre class="mu-trace">@trace</pre>
+                                        </details>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (Model.PageCount > 1)
+                {
+                    <div class="mu-pager">
+                        @if (Model.PageNumber > 1)
+                        {
+                            <a class="mu-btn mu-btn--sm" href="@Model.Link(page: 1)">&laquo; First</a>
+                            <a class="mu-btn mu-btn--sm" href="@Model.Link(page: Model.PageNumber - 1)">&lsaquo; Previous</a>
+                        }
+                        <span class="mu-muted">page @Model.PageNumber of @Model.PageCount</span>
+                        @if (Model.PageNumber < Model.PageCount)
+                        {
+                            <a class="mu-btn mu-btn--sm" href="@Model.Link(page: Model.PageNumber + 1)">Next &rsaquo;</a>
+                            <a class="mu-btn mu-btn--sm" href="@Model.Link(page: Model.PageCount)">Last &raquo;</a>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@functions {
+    // A full type name is most of the column width and the namespace is the same on every row.
+    private static string Shorten(string source)
+    {
+        var lastDot = source.LastIndexOf('.');
+        return lastDot > 0 && lastDot < source.Length - 1 ? source[(lastDot + 1)..] : source;
+    }
+}

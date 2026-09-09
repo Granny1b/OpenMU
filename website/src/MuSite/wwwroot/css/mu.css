@@ -376,3 +376,32 @@ h3 { font-size: 1.05rem; }
 .mu-list--flush { margin-bottom: 0; }
 .mu-rule { border: 0; border-top: 1px solid var(--mu-border); margin: 16px 0; }
 .mu-pager--left { justify-content: flex-start; }
+
+/* --- server log ------------------------------------------------------------------------------
+   Levels are coloured from the existing palette rather than raw red/amber, so they stay legible
+   on the parchment ground and keep the contrast ratios the tokens were chosen for.
+   --------------------------------------------------------------------------------------------- */
+.mu-lvl { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.mu-lvl--fatal       { color: var(--mu-on-crimson); background: var(--mu-crimson); padding: 1px 6px; }
+.mu-lvl--error       { color: var(--mu-danger); }
+.mu-lvl--warning     { color: var(--mu-warning); }
+.mu-lvl--information { color: var(--mu-ink-muted); }
+.mu-lvl--debug       { color: var(--mu-ink-muted); }
+/* Unparsed means the shipper did not recognise the line. It has to stand out: it is a bug in the
+   pipeline, not a property of the server, and it would otherwise hide among ordinary rows. */
+.mu-lvl--unparsed    { color: var(--mu-on-crimson); background: var(--mu-info); padding: 1px 6px; }
+
+/* A category is a full .NET type name; without this the column swallows the message. */
+.mu-src { font-size: .78rem; color: var(--mu-ink-muted); word-break: break-all; }
+.mu-logmsg { word-break: break-word; }
+
+/* Stack traces, in a <details> - native HTML, because the CSP forbids script entirely. */
+.mu-trace {
+  margin: 6px 0 0; padding: 8px;
+  background: var(--mu-bg-deep); border: 1px solid var(--mu-border);
+  font-family: var(--mu-mono); font-size: .76rem;
+  overflow-x: auto; white-space: pre;
+}
+.mu-more { font-size: .78rem; color: var(--mu-gold-ink); cursor: pointer; }
+.mu-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+.mu-chip--on { background: var(--mu-bg-deep); border-color: var(--mu-border-strong); }

@@ -195,6 +195,10 @@ jobs:
       - name: Every query maps to its record
         env:
           MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"
+          # ServerLog's queries run against the SITE database, so the tool needs both. An unset
+          # variable is a failure there, not a silent skip - a check that quietly covers half the
+          # queries is the blind spot this tool exists to close.
+          MUSITE_TEST_SITE_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu_web"
           PGPASSWORD: ci
         run: python3 tools/verify-query-mapping.py
 
