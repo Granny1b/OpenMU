@@ -106,6 +106,38 @@ public sealed class MarkupTests
         Assert.Empty(undefined);
     }
 
+    [Fact]
+    public void EveryMuClassTheChartsEmitIsDefinedInTheStylesheet()
+    {
+        // The charts are built in C# rather than in a .cshtml, so the sweep above cannot see them -
+        // and a chart styled by a class that does not exist renders as an invisible line on an
+        // invisible grid, with nothing anywhere to say why.
+        var stylesheet = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "../../../../../src/MuSite/wwwroot/css/mu.css")));
+        var source = File.ReadAllText(Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "../../../../../src/MuSite/Charts/Chart.cs")));
+
+        var undefined = new SortedSet<string>();
+        foreach (Match attribute in Regex.Matches(source, @"class=\\""(?<names>[^""\\]*)"))
+        {
+            foreach (var name in attribute.Groups["names"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!name.StartsWith("mu-", StringComparison.Ordinal) || name.Contains('{'))
+                {
+                    continue;
+                }
+
+                if (!stylesheet.Contains("." + name, StringComparison.Ordinal))
+                {
+                    undefined.Add(name);
+                }
+            }
+        }
+
+        Assert.NotEmpty(Regex.Matches(source, @"class=\\"""));
+        Assert.Empty(undefined);
+    }
+
     [Theory]
     [MemberData(nameof(Pages))]
     public void NoPageCarriesScriptOrAnEventHandler(string page)

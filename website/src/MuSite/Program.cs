@@ -93,6 +93,17 @@ builder.Services.AddHostedService<BanExpiryService>();
 // Keeps server_log bounded. Without it the log table grows until the disk is full, at which point
 // PostgreSQL stops accepting writes and takes the game server down with it.
 builder.Services.AddHostedService<LogRetentionService>();
+
+// The same argument for the measurements, which arrive every thirty seconds and never stop.
+builder.Services.AddSingleton<ServerMetrics>();
+builder.Services.AddHostedService<MetricRetentionService>();
+
+// Reads the exact player count from OpenMU's /api/status when a Viewer API key is configured. The
+// timeout is short and deliberate: this call sits inside the probe loop, and a game server that has
+// stopped answering must not hold the loop open long enough to miss the next tick.
+builder.Services.AddHttpClient<OpenMuStatusClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(5));
+
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
 

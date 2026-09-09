@@ -294,6 +294,104 @@ A row count of zero with Vector running usually means the log volume is empty be
 not written since the volume was added; a pile of `Unparsed` rows means the regex needs the
 attention above.
 
+## Server health
+
+`/admin/metrics` charts the machine and the game side by side, so "the server filled up at eight"
+can be read against "the box ran out of memory at eight" on one screen. Two collectors fill it,
+both on a 30 second interval so the two sets of series land on the same buckets:
+
+| Source | Writes | What it gives |
+| --- | --- | --- |
+| Vector's `host_metrics` | `host_metric` as `mu_web_log` | processor, memory, disk, load, network |
+| The site's own `ServerProbe` | `server_sample` as `mu_web_app` | up/down, load percentage, players |
+
+### Why the VPS figures need nothing mounted
+
+`/proc` inside a container is the host's `/proc`, so processor, memory and load are the real
+machine's without any bind mount. Disk is the interesting one: a Docker volume lives on the host
+filesystem, so `statvfs` on `/openmu-logs` reports the **host** disk - the number that actually
+fills up. That is why the filesystem collector is restricted to real block-device filesystems and
+keyed by device rather than mount point; the log volume and Vector's own data directory are two
+mounts of one disk, and keying by mount point would draw it as two identical lines.
+
+Nothing here needs `/var/run/docker.sock`, which is the same call the log shipper made: read access
+to that socket is effectively root on the host.
+
+### Player counts need an API key, and only for the exact number
+
+OpenMU keeps the number of connected players in memory - there is no table - and the all-in-one
+image ships no metrics exporter. Two sources, layered:
+
+* **The connect server**, spoken as a game client would (`ConnectServerClient`). No credential, and
+  it proves the port players actually use is answering. But `LoadPercentage` is
+  `(byte)(connections * 100f / MaximumPlayers)`, so at OpenMU's default cap of 1000 one percent is
+  ten players and a server with nine online reports **zero**. It is a load gauge, not a counter.
+* **`/api/status`**, for the exact figure. This needs an API key:
+
+  1. In OpenMU's admin panel, open **API keys** and create one with the **Viewer** role. Viewer can
+     read server status; it cannot send global messages, which needs Operator.
+  2. Put it in `.env` as `MUSITE_STATUSAPIKEY`, then `docker compose up -d mu-site`.
+
+  Be aware that the same endpoint also returns the names of everyone online. The website reads the
+  count and drops the list, but the key itself can read both.
+
+With no key the page still charts availability and load; the players card says so rather than
+drawing a flat zero line.
+
+### What it costs
+
+Measured, not estimated - all on a four core machine:
+
+| | |
+| --- | --- |
+| Vector, whole pipeline (logs + metrics) | **49 MB** resident, **0.13%** of one core |
+| Rows written | ~20 per scrape, ~58,000 a day |
+| 30 days of measurements | 1.04 million rows, **138 MB** including indexes |
+| Uncached page load, 7 day window | ~150 ms of database work |
+
+Four things keep that small, and each is a deliberate choice rather than a default:
+
+* **The collectors are curated.** `host_metrics` left alone emits 151 rows per scrape, most of it
+  loop devices and one row per process. The collector list, the device filters and the
+  `vps_wanted` transform cut it to about 20.
+* **The read index covers the queries.** `(name, at DESC) INCLUDE (scope, value)` makes every
+  dashboard query an index-only scan - measured at `Heap Fetches: 0` over a million rows. On a
+  small VPS the disk, not the processor, is what runs out first.
+* **The retention index is BRIN.** The table is append-only in timestamp order, which is the one
+  case where a block-range index is both accurate and nearly free: **24 kB** against roughly 25 MB
+  for the b-tree it replaces.
+* **Series are cached for 25 seconds**, just under the collection interval - so reloading the page,
+  or a second administrator opening it, costs nothing. There is no newer data to fetch between two
+  scrapes. The *response* is deliberately not cached: doing that on a page behind admin
+  authentication risks handing one person's view to another.
+
+`MUSITE_METRICSRETENTIONDAYS` (default 14, twice the longest window the page draws) bounds the
+growth; 0 keeps everything, which is unbounded on the same disk that holds the database and the
+game.
+
+### If the page says the tables do not exist
+
+Same trap as the log table: migrations are baked into `mu-site-migrate` at build time, so an image
+built before `003_metrics.sql` reports success having skipped it.
+
+```bash
+docker compose build mu-site-migrate
+docker compose run --rm mu-site-migrate
+```
+
+### The charts have no JavaScript in them
+
+There is no `script-src` in this site's CSP at all, so no charting library can run here. The charts
+are SVG built on the server in `Charts/Chart.cs`; hover readouts are SVG `<title>` elements, which
+browsers show natively. Two things follow that are easy to undo by accident:
+
+* Colours come from classes in `mu.css`, never from `style=` attributes - the policy drops those,
+  and `MarkupTests` fails the build if one appears, including in the chart code.
+* Each chart size has its own `viewBox` width, chosen to be close to the width it renders at. An
+  SVG with a `viewBox` scales uniformly to its container, **text included**, so one geometry shared
+  between a full-width card and a third-width card renders the small card's labels at about six
+  pixels: present, correct and unreadable.
+
 ## Tests
 
 ```sh

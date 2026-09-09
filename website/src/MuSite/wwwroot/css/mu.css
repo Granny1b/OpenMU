@@ -405,3 +405,203 @@ h3 { font-size: 1.05rem; }
 .mu-more { font-size: .78rem; color: var(--mu-gold-ink); cursor: pointer; }
 .mu-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .mu-chip--on { background: var(--mu-bg-deep); border-color: var(--mu-border-strong); }
+
+/* --- charts ---
+   Server-rendered SVG, because this site runs NO JavaScript: the CSP has no script-src at all, so
+   every charting library is out and the geometry is produced in C# (Charts/Chart.cs). Colours have
+   to live here rather than on the elements, for the same reason every other style does - the policy
+   drops inline style attributes, and WebsiteMarkupTests fails the build if one appears.
+
+   Everything below is expressed in the theme tokens, so the charts follow light and dark with the
+   rest of the site instead of needing a second palette. */
+
+.mu-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.mu-chart__grid {
+  stroke: var(--mu-border);
+  stroke-width: 1;
+  opacity: .55;
+}
+
+/* 13 user units, and the viewBox of each chart size is picked so that a user unit is close to a
+   rendered pixel - see the Box record in Charts/Chart.cs. Sharing one viewBox between a full-width
+   card and a third-width card is what made these labels render at about six pixels. */
+.mu-chart__ylabel,
+.mu-chart__xlabel {
+  fill: var(--mu-ink-muted);
+  font-family: var(--mu-sans);
+  font-size: 13px;
+}
+
+.mu-chart__area {
+  fill: var(--mu-crimson);
+  opacity: .14;
+  stroke: none;
+}
+
+.mu-chart__line {
+  stroke: var(--mu-crimson);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.mu-chart__dot {
+  fill: var(--mu-crimson);
+}
+
+/* The whole hover story. A transparent column per point carries a <title>, which the browser shows
+   natively - no script, nothing for the CSP to block. `transparent` and not `none`: an element
+   filled with `none` does not receive pointer events, so the tooltip would never appear. */
+.mu-chart__hit {
+  fill: transparent;
+}
+
+.mu-chart__hit:hover {
+  fill: var(--mu-ink);
+  opacity: .06;
+}
+
+.mu-chart__empty {
+  margin: 0;
+  padding: 2.2rem .5rem;
+  text-align: center;
+  color: var(--mu-ink-muted);
+  font-style: italic;
+}
+
+/* A second accent, for the charts that carry two meanings at once - errors against warnings. */
+.mu-chart--info .mu-chart__line { stroke: var(--mu-info); }
+.mu-chart--info .mu-chart__area { fill: var(--mu-info); }
+.mu-chart--good .mu-chart__line { stroke: var(--mu-success); }
+.mu-chart--good .mu-chart__area { fill: var(--mu-success); }
+
+/* --- meters --- */
+
+.mu-meter {
+  margin: 0 0 .9rem;
+}
+
+.mu-meter__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .5rem;
+  margin-bottom: .28rem;
+  font-size: .9rem;
+}
+
+.mu-meter__value {
+  font-family: var(--mu-mono);
+  font-weight: 700;
+}
+
+.mu-meter__bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+}
+
+.mu-meter__track { fill: var(--mu-track); }
+.mu-meter__fill--ok { fill: var(--mu-success); }
+.mu-meter__fill--warn { fill: var(--mu-warning); }
+.mu-meter__fill--critical { fill: var(--mu-danger); }
+
+.mu-meter__detail {
+  margin: .28rem 0 0;
+  font-size: .82rem;
+  color: var(--mu-ink-muted);
+}
+
+/* --- dashboard cards --- */
+
+.mu-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.mu-card {
+  background: var(--mu-surface);
+  border: 1px solid var(--mu-border);
+  border-radius: var(--mu-radius);
+  box-shadow: var(--mu-shadow);
+  padding: .85rem 1rem 1rem;
+  min-width: 0;
+}
+
+.mu-card--wide {
+  grid-column: 1 / -1;
+}
+
+.mu-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .75rem;
+  margin-bottom: .5rem;
+  border-bottom: 1px solid var(--mu-border);
+  padding-bottom: .4rem;
+}
+
+.mu-card__title {
+  margin: 0;
+  font-family: var(--mu-serif);
+  font-size: 1.02rem;
+  letter-spacing: .01em;
+}
+
+.mu-card__now {
+  font-family: var(--mu-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mu-card__note {
+  margin: .55rem 0 0;
+  font-size: .82rem;
+  color: var(--mu-ink-muted);
+}
+
+/* --- the summary strip --- */
+
+.mu-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .6rem;
+  margin: 1rem 0;
+}
+
+.mu-stat {
+  background: var(--mu-raised);
+  border: 1px solid var(--mu-border);
+  border-radius: var(--mu-radius);
+  padding: .6rem .75rem;
+}
+
+.mu-stat__value {
+  display: block;
+  font-family: var(--mu-mono);
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.mu-stat__label {
+  display: block;
+  margin-top: .1rem;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--mu-ink-muted);
+}
+
+.mu-stat__value--down { color: var(--mu-danger); }
+.mu-stat__value--up { color: var(--mu-success); }

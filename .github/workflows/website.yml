@@ -179,6 +179,22 @@ jobs:
           deny  mu_web_app 'DELETE FROM audit_log'
           deny  mu_web_app "INSERT INTO server_log (id,at,level,message) VALUES (gen_random_uuid(), now(), 'x', 'y')"
 
+          # The metric tables draw the same boundary. The shipper appends measurements and can do
+          # nothing else: one that could READ them could work out when the server is empty, which is
+          # exactly when a break-in goes unnoticed, and one that could DELETE could erase the spike
+          # it caused. The site reads and prunes, and cannot forge a measurement.
+          allow mu_web_log "INSERT INTO host_metric (at,name,scope,value) VALUES (now(), 'load1', '', 1)"
+          deny  mu_web_log 'SELECT count(*) FROM host_metric'
+          deny  mu_web_log 'DELETE FROM host_metric'
+          deny  mu_web_log "UPDATE host_metric SET value = 0"
+          deny  mu_web_log 'SELECT count(*) FROM server_sample'
+          deny  mu_web_log "INSERT INTO server_sample (at,is_up) VALUES (now(), true)"
+          allow mu_web_app 'SELECT count(*) FROM host_metric'
+          allow mu_web_app "DELETE FROM host_metric WHERE at < now() - interval '99 years'"
+          deny  mu_web_app "INSERT INTO host_metric (at,name,scope,value) VALUES (now(), 'x', '', 1)"
+          allow mu_web_app "INSERT INTO server_sample (at,is_up,players) VALUES (now(), true, 1)"
+          allow mu_web_app "DELETE FROM server_sample WHERE at < now() - interval '99 years'"
+
       - name: Test
         env:
           MUSITE_TEST_DB: "Host=localhost;Port=5432;Username=postgres;Password=ci;Database=openmu"

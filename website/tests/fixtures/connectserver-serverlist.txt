@@ -1,0 +1,27 @@
+# Real ConnectServer packets, produced by OpenMU's OWN writers - not by reading the layout and
+# typing out what it ought to be. Generated with src/Network/Packets:
+#
+#     var packet = new byte[ServerListResponse.GetRequiredSize(4)];
+#     var response = new ServerListResponse(packet) { ServerCount = 4 };
+#     response[i].ServerId = ...; response[i].LoadPercentage = ...;
+#
+# for the four servers listed below. If OpenMU ever changes the layout, regenerating this file is
+# what makes the change visible - a hand-written expectation would just keep agreeing with itself.
+#
+# The layout MIXES ENDIANNESS, which is the whole reason this fixture exists:
+#
+#   C2          header type
+#   00 17       total length, 23 bytes, BIG endian
+#   F4 06       code and sub code
+#   00 04       server count, BIG endian
+#   then 4 bytes per server: server id LITTLE endian, load percentage, one padding byte
+#
+# servers: id 0 load 37, id 1 load 0, id 258 load 100, id 65535 load 7
+serverlist C20017F4060004000025000100000002016400FFFF0700
+
+# The greeting the connect server sends the instant it accepts a connection, before being asked
+# anything. C1 header, code 0x00, sub code 0x01.
+hello C1040001
+
+# What a game client sends to ask for the list. The probe must send exactly these bytes.
+request C104F406
