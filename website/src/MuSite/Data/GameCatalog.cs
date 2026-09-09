@@ -40,6 +40,9 @@ public sealed record ItemRow(
     int DropLevel, int? MaximumDropLevel, int Width, int Height, int Durability,
     bool IsQuestItem, bool DropsFromMonsters, int? SkillNumber);
 
+/// <summary>One item group that actually holds items, for the group picker.</summary>
+public sealed record ItemGroupRow(int Group, int Items);
+
 /// <summary>
 /// One excellent option an item can carry, and the bit of `ex` that selects it.
 ///
@@ -180,6 +183,30 @@ public sealed class GameCatalog(SiteDataSources sources)
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<SpawnRow>(
             new CommandDefinition(sql, new { monsterNumber }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.AsList();
+    }
+
+    /// <summary>
+    /// The item groups that actually hold items, with how many each holds.
+    ///
+    /// Read rather than hardcoded 0-15: the picker must not offer a group this server's
+    /// configuration leaves empty, and must not hide one it invented.
+    /// </summary>
+    public async Task<IReadOnlyList<ItemGroupRow>> ItemGroupsAsync(CancellationToken cancellationToken)
+    {
+        const string sql =
+            """
+            SELECT "Group"::int    AS "Group",
+                   count(*)::int   AS Items
+              FROM config."ItemDefinition"
+             GROUP BY "Group"
+             ORDER BY 1
+            """;
+
+        await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<ItemGroupRow>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return rows.AsList();
     }

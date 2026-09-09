@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MuSite.Data;
@@ -29,8 +30,21 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     /// <summary>The search text.</summary>
     public string? Query { get; private set; }
 
-    /// <summary>The item group filter, when one is applied.</summary>
+    /// <summary>
+    /// The item group filter, or null for all groups.
+    ///
+    /// This is ONLY the filter now. It used to double as half of the selected item's identity,
+    /// which is why picking a sword silently narrowed the whole list to group 0 and the picker
+    /// could never sit on "All": the Build link had to carry group=0 to say which item it meant.
+    /// The selection travels as `item=group:number` instead.
+    /// </summary>
     public int? Group { get; private set; }
+
+    /// <summary>The groups that hold items, for the picker.</summary>
+    public IReadOnlyList<ItemGroupRow> Groups { get; private set; } = [];
+
+    /// <summary>The `item=` value that selects one item: its group and number.</summary>
+    public static string ItemKey(int group, int number) => $"{group}:{number}";
 
     /// <summary>The matching item definitions on this page.</summary>
     public IReadOnlyList<ItemRow> Results { get; private set; } = [];
@@ -50,6 +64,34 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     /// <summary>The last row of the current page.</summary>
     public int LastRow => Math.Min(this.PageNumber * PageSize, this.Total);
 
+    /// <summary>
+    /// The Build link for one row: selects that item and keeps the current search and page.
+    ///
+    /// It deliberately does NOT set the group filter. Building a sword used to narrow the whole
+    /// list to swords, because the link had to say group=0 to identify the item at all.
+    /// </summary>
+    public string BuildLink(ItemRow item)
+    {
+        var link = $"/admin/items?item={ItemKey(item.Group, item.Number)}";
+
+        if (!string.IsNullOrEmpty(this.Query))
+        {
+            link += $"&q={Uri.EscapeDataString(this.Query)}";
+        }
+
+        if (this.Group is { } group)
+        {
+            link += $"&group={group}";
+        }
+
+        if (this.PageNumber > 1)
+        {
+            link += $"&page={this.PageNumber}";
+        }
+
+        return link;
+    }
+
     /// <summary>A link to another page of the same search, keeping any built item selected.</summary>
     public string PageLink(int page)
     {
@@ -66,11 +108,9 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
         }
 
         // Keeping the selection means paging the list does not throw away a half-built command.
-        // Group is always set alongside it - the builder needs both to identify an item - so it is
-        // already on the link from the branch above.
         if (this.Selected is { } selected)
         {
-            link += $"&number={selected.Number}";
+            link += $"&item={ItemKey(selected.Group, selected.Number)}";
         }
 
         return link;
@@ -133,7 +173,7 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     public async Task OnGetAsync(
         [FromQuery] string? q,
         [FromQuery] int? group,
-        [FromQuery] int? number,
+        [FromQuery] string? item,
         [FromQuery] int page,
         [FromQuery] int lvl,
         [FromQuery] int[]? exbit,
@@ -147,6 +187,7 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     {
         this.Query = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
         this.Group = group;
+        this.Groups = await catalog.ItemGroupsAsync(cancellationToken).ConfigureAwait(false);
         this.Total = await catalog.ItemCountAsync(this.Query, group, cancellationToken).ConfigureAwait(false);
 
         // Clamped both ways: ?page=0 and ?page=9999 are one edit of the address bar away, and an
@@ -157,7 +198,7 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
             .ItemsAsync(this.Query, group, (this.PageNumber - 1) * PageSize, PageSize, cancellationToken)
             .ConfigureAwait(false);
 
-        if (group is not { } selectedGroup || number is not { } selectedNumber)
+        if (!TryParseItem(item, out var selectedGroup, out var selectedNumber))
         {
             return;
         }
@@ -238,5 +279,25 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
         }
 
         static int Sum(int[]? bits) => bits is null ? 0 : bits.Where(b => b > 0).Distinct().Sum();
+    }
+
+    /// <summary>
+    /// Reads an `item=group:number` value. Anything malformed selects nothing rather than throwing:
+    /// the value is in the query string, so a stray edit must not 500 the page.
+    /// </summary>
+    private static bool TryParseItem(string? value, out int group, out int number)
+    {
+        group = 0;
+        number = 0;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split(':', 2);
+        return parts.Length == 2
+            && int.TryParse(parts[0], CultureInfo.InvariantCulture, out group)
+            && int.TryParse(parts[1], CultureInfo.InvariantCulture, out number);
     }
 }

@@ -24,8 +24,11 @@
         <div class="mu-panel__body">
             <form method="get">
                 <input type="hidden" name="q" value="@query" />
-                <input type="hidden" name="group" value="@selected.Group" />
-                <input type="hidden" name="number" value="@selected.Number" />
+                @if (Model.Group is { } filtered)
+                {
+                    <input type="hidden" name="group" value="@filtered" />
+                }
+                <input type="hidden" name="item" value="@MuSite.Pages.Admin.ItemsModel.ItemKey(selected.Group, selected.Number)" />
 
                 <div class="mu-row mu-row--top">
                     @* ---- item level ------------------------------------------------------- *@
@@ -271,15 +274,26 @@
                 <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
                        placeholder="e.g. jewel of bless" autofocus="@(Model.Selected is null)" />
             </div>
-            <div class="mu-field mu-field--xs mu-field--flush">
+            <div class="mu-field mu-field--md mu-field--flush">
                 <label class="mu-label" for="group">Group</label>
-                <input class="mu-input" id="group" name="group" type="number" min="0" max="15"
-                       value="@(Model.Group?.ToString() ?? string.Empty)" placeholder="any" />
+                <select class="mu-input" id="group" name="group">
+                    @* An empty value binds to int? as null, which is what "all groups" means. *@
+                    <option value="" selected="@(Model.Group is null)">All groups</option>
+                    @foreach (var g in Model.Groups)
+                    {
+                        <option value="@g.Group" selected="@(Model.Group == g.Group)">
+                            @MuSite.Game.GameEnums.ItemGroup.Label(g.Group) (@g.Items)
+                        </option>
+                    }
+                </select>
             </div>
             <button class="mu-btn" type="submit">Search</button>
         </form>
 
-        <p class="mu-hint">Jewels are group @MuSite.Game.GmCommands.JewelGroup in Season 6.</p>
+        <p class="mu-hint">
+            Leave the group on <em>All groups</em> to search everything. The number in brackets is how
+            many definitions that group holds.
+        </p>
 
         @if (Model.Results.Count == 0)
         {
@@ -325,7 +339,7 @@
                                 }
                             </td>
                             <td>
-                                <a class="mu-btn" href="/admin/items?q=@Uri.EscapeDataString(query)&amp;group=@item.Group&amp;number=@item.Number">Build</a>
+                                <a class="mu-btn" href="@Model.BuildLink(item)">Build</a>
                             </td>
                         </tr>
                     }
