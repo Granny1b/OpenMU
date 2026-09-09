@@ -13,14 +13,14 @@
         <span class="mu-panel__aside">@Model.Total.ToString("N0") ranked &middot; updated @Model.Age</span>
     </div>
     <div class="mu-panel__body">
-        <nav class="mu-pager" style="justify-content:flex-start">
+        <nav class="mu-pager mu-pager--left">
             @foreach (var (board, title) in RankingsModel.Boards)
             {
                 <a class="mu-btn mu-btn--sm" href="@Model.BoardLink(board)">@title</a>
             }
         </nav>
 
-        <form method="get" class="mu-field" style="max-width:280px">
+        <form method="get" class="mu-field mu-field--md">
             <label class="mu-label" for="q">Find a character</label>
             <input class="mu-input" id="q" name="q" type="search" value="@Model.Search" placeholder="name" />
         </form>

@@ -310,3 +310,69 @@ h3 { font-size: 1.05rem; }
 .mu-muted { color: var(--mu-ink-muted); }
 .mu-mono { font-family: var(--mu-mono); font-size: .85em; }
 .mu-center { text-align: center; }
+
+/* --- option pickers ------------------------------------------------------------------------
+   THESE EXIST BECAUSE INLINE STYLES DO NOT WORK ON THIS SITE. The Content-Security-Policy in
+   Program.cs sets `style-src 'self'` with no 'unsafe-inline', so the browser silently drops every
+   style="..." attribute - and there is no script-src at all, so nothing can be fixed up at runtime
+   either. curl never shows it, because curl does not enforce CSP. Anything that needs styling
+   needs a class here. WebsiteMarkupTests fails the build if a .cshtml grows a style attribute.
+   ------------------------------------------------------------------------------------------- */
+.mu-checklist {
+  border: 1px solid var(--mu-border); border-radius: var(--mu-radius);
+  background: var(--mu-raised);
+}
+.mu-check {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 10px; cursor: pointer;
+  border-top: 1px solid var(--mu-border);
+  font-size: .9rem;
+}
+.mu-check:first-child { border-top: 0; }
+.mu-check:hover { background: var(--mu-bg-deep); }
+.mu-check input { flex: none; margin: 0; }
+.mu-check__no {
+  flex: none; min-width: 1.5em; text-align: right;
+  font-size: .78rem; color: var(--mu-ink-muted); font-variant-numeric: tabular-nums;
+}
+.mu-check__text { flex: 1 1 12em; }
+.mu-check__worth {
+  flex: none; font-size: .78rem; color: var(--mu-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The running total under a checklist: with no JavaScript it can only be right after a build,
+   so it says so rather than looking live. */
+.mu-total { margin: 6px 0 0; font-size: .82rem; color: var(--mu-ink-muted); }
+.mu-total strong { color: var(--mu-ink); font-variant-numeric: tabular-nums; }
+
+/* --- form layout ---------------------------------------------------------------------------- */
+.mu-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+.mu-row--top { align-items: flex-start; }
+.mu-field--xs { max-width: 130px; }
+.mu-field--sm { max-width: 200px; }
+.mu-field--md { max-width: 320px; }
+.mu-field--lg { max-width: 440px; }
+.mu-field--flush { margin-bottom: 0; }
+.mu-hint--tight { margin-top: 0; margin-bottom: 6px; }
+.mu-stack > * { display: block; }
+.mu-stack > * + * { margin-top: 4px; }
+
+/* --- utilities used in place of the inline styles the CSP drops ------------------------------ */
+.mu-tight { margin-top: -8px; }
+.mu-gap { display: flex; gap: 8px; flex-wrap: wrap; }
+.mu-gap--sm { gap: 6px; }
+.mu-flush { margin-bottom: 0; }
+.mu-spaced { margin-top: 16px; }
+.mu-listreset { margin: 8px 0 0; }
+
+/* Replacements for the last of the dropped inline styles, page by page. */
+.mu-flat { margin: 0; }
+.mu-tight-b { margin-bottom: 2px; }
+.mu-meta { margin: 0 0 12px; font-size: .85rem; }
+.mu-fine { font-size: .87rem; }
+.mu-mono--lg { font-size: 1.1em; }
+.mu-list { margin: 0 0 12px; padding-left: 1.2em; }
+.mu-list--flush { margin-bottom: 0; }
+.mu-rule { border: 0; border-top: 1px solid var(--mu-border); margin: 16px 0; }
+.mu-pager--left { justify-content: flex-start; }

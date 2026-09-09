@@ -74,6 +74,7 @@ PARAMETERS = {
     '@search': "''",
     '@group': 'NULL::int',
     '@limit': '50',
+    '@offset': '0',
     '@number': '13',
 
     # ItemOptionTypes.Excellent and ItemOptionTypes.Option, which is what tells an item's
@@ -98,9 +99,22 @@ def records(src):
 
 
 def queries(src):
-    """[(sql, record name)] in file order."""
+    """[(sql, record name)] in file order.
+
+    Pairing is POSITIONAL: the Nth `const string sql` goes with the Nth Query*Async<T>. That holds
+    only while every such literal has exactly one matching call, so the counts are asserted rather
+    than zipped blindly - zip() silently truncates, which would check some queries against another
+    query's record and report "ok".
+
+    Scalar queries are deliberately outside this: name their literal `countSql` (not `sql`) and
+    they are skipped. A COUNT(*) has no record to line up with.
+    """
     sqls = re.findall(r'const string sql\s*=\s*"""(.*?)""";', src, re.S)
     types = re.findall(r'Query(?:SingleOrDefault)?Async<(\w+)>', src)
+    if len(sqls) != len(types):
+        raise SystemExit(
+            f'{len(sqls)} `const string sql` literals but {len(types)} Query*Async<T> calls. '
+            'Positional pairing is broken - a scalar query should use `const string countSql`.')
     return list(zip(sqls, types))
 
 

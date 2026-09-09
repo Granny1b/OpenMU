@@ -6,7 +6,7 @@
 }
 
 <h1>GM commands</h1>
-<p class="mu-muted" style="margin-top:-8px">
+<p class="mu-muted mu-tight">
     Every chat command this server build ships &mdash; @Model.Total in total, @Model.DisabledCount of
     which are disabled until you enable them on the admin panel's Plugins page.
 </p>
@@ -20,13 +20,13 @@
 
 <div class="mu-panel">
     <div class="mu-panel__body">
-        <form method="get" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-            <div class="mu-field" style="max-width:300px;margin-bottom:0">
+        <form method="get" class="mu-row">
+            <div class="mu-field mu-field--md mu-field--flush">
                 <label class="mu-label" for="q">Command or description</label>
                 <input class="mu-input" id="q" name="q" type="search" value="@Model.Query"
                        placeholder="e.g. item, ban, monster" autofocus />
             </div>
-            <div class="mu-field" style="margin-bottom:0">
+            <div class="mu-field mu-field--flush">
                 <label class="mu-label" for="gm">
                     <input id="gm" name="gm" type="checkbox" value="true" checked="@Model.GameMasterOnly" />
                     Game master only

@@ -40,6 +40,9 @@ public sealed record ItemRow(
     int DropLevel, int? MaximumDropLevel, int Width, int Height, int Durability,
     bool IsQuestItem, bool DropsFromMonsters, int? SkillNumber);
 
+/// <summary>One item group that actually holds items, for the group picker.</summary>
+public sealed record ItemGroupRow(int Group, int Items);
+
 /// <summary>
 /// One excellent option an item can carry, and the bit of `ex` that selects it.
 ///
@@ -101,8 +104,24 @@ public sealed class GameCatalog(SiteDataSources sources)
     /// rather than a bare aggregate for the same reason the ranking boards do: a duplicate row for
     /// one attribute must not turn one monster into two.
     /// </summary>
+    public async Task<int> MonsterCountAsync(string? search, CancellationToken cancellationToken)
+    {
+        const string countSql =
+            """
+            SELECT count(*)::int
+              FROM config."MonsterDefinition" m
+             WHERE (@search = '' OR m."Designation" ILIKE '%' || @search || '%'
+                    OR CAST(m."Number" AS text) = @search)
+            """;
+
+        await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            countSql, new { search = search?.Trim() ?? string.Empty }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<MonsterRow>> MonstersAsync(
-        string? search, int limit, CancellationToken cancellationToken)
+        string? search, int offset, int limit, CancellationToken cancellationToken)
     {
         const string sql =
             """
@@ -121,14 +140,15 @@ public sealed class GameCatalog(SiteDataSources sources)
              WHERE (@search = '' OR m."Designation" ILIKE '%' || @search || '%'
                     OR CAST(m."Number" AS text) = @search)
              GROUP BY m."Id", m."Number", m."Designation", m."ObjectKind"
-             ORDER BY 3 DESC, m."Designation" ASC
-             LIMIT @limit
+             ORDER BY 3 DESC, m."Designation" ASC, m."Number" ASC
+             LIMIT @limit OFFSET @offset
             """;
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<MonsterRow>(new CommandDefinition(sql, new
         {
             search = search?.Trim() ?? string.Empty,
+            offset,
             limit,
             levelId = StatIds.Level,
             healthId = StatIds.MaximumHealth,
@@ -167,9 +187,54 @@ public sealed class GameCatalog(SiteDataSources sources)
         return rows.AsList();
     }
 
-    /// <summary>Item definitions, filtered by name, or by "group:number".</summary>
+    /// <summary>
+    /// The item groups that actually hold items, with how many each holds.
+    ///
+    /// Read rather than hardcoded 0-15: the picker must not offer a group this server's
+    /// configuration leaves empty, and must not hide one it invented.
+    /// </summary>
+    public async Task<IReadOnlyList<ItemGroupRow>> ItemGroupsAsync(CancellationToken cancellationToken)
+    {
+        const string sql =
+            """
+            SELECT "Group"::int    AS "Group",
+                   count(*)::int   AS Items
+              FROM config."ItemDefinition"
+             GROUP BY "Group"
+             ORDER BY 1
+            """;
+
+        await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<ItemGroupRow>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return rows.AsList();
+    }
+
+    /// <summary>How many item definitions a search matches, for paging.</summary>
+    public async Task<int> ItemCountAsync(string? search, int? group, CancellationToken cancellationToken)
+    {
+        // `countSql`, not `sql`: verify-query-mapping.py pairs each `const string sql` with the
+        // next Query*Async<T> by position, and a scalar has no record to pair with.
+        const string countSql =
+            """
+            SELECT count(*)::int
+              FROM config."ItemDefinition" d
+             WHERE (@search = '' OR d."Name" ILIKE '%' || @search || '%')
+               AND (@group IS NULL OR d."Group" = @group)
+            """;
+
+        await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(countSql, new
+        {
+            search = search?.Trim() ?? string.Empty,
+            group,
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>One page of item definitions, filtered by name and group.</summary>
     public async Task<IReadOnlyList<ItemRow>> ItemsAsync(
-        string? search, int? group, int limit, CancellationToken cancellationToken)
+        string? search, int? group, int offset, int limit, CancellationToken cancellationToken)
     {
         const string sql =
             """
@@ -191,7 +256,7 @@ public sealed class GameCatalog(SiteDataSources sources)
              WHERE (@search = '' OR d."Name" ILIKE '%' || @search || '%')
                AND (@group IS NULL OR d."Group" = @group)
              ORDER BY d."Group", d."Number"
-             LIMIT @limit
+             LIMIT @limit OFFSET @offset
             """;
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -199,6 +264,7 @@ public sealed class GameCatalog(SiteDataSources sources)
         {
             search = search?.Trim() ?? string.Empty,
             group,
+            offset,
             limit,
         }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 

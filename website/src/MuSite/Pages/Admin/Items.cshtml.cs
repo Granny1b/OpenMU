@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MuSite.Data;
@@ -22,14 +23,98 @@ namespace MuSite.Pages.Admin;
 /// </summary>
 public sealed class ItemsModel(GameCatalog catalog) : PageModel
 {
+    /// <summary>Rows per page. The Season 6 catalogue runs to several hundred definitions, so a
+    /// single capped list silently hid most of them.</summary>
+    private const int PageSize = 50;
+
     /// <summary>The search text.</summary>
     public string? Query { get; private set; }
 
-    /// <summary>The item group filter, when one is applied.</summary>
+    /// <summary>
+    /// The item group filter, or null for all groups.
+    ///
+    /// This is ONLY the filter now. It used to double as half of the selected item's identity,
+    /// which is why picking a sword silently narrowed the whole list to group 0 and the picker
+    /// could never sit on "All": the Build link had to carry group=0 to say which item it meant.
+    /// The selection travels as `item=group:number` instead.
+    /// </summary>
     public int? Group { get; private set; }
 
-    /// <summary>The matching item definitions.</summary>
+    /// <summary>The groups that hold items, for the picker.</summary>
+    public IReadOnlyList<ItemGroupRow> Groups { get; private set; } = [];
+
+    /// <summary>The `item=` value that selects one item: its group and number.</summary>
+    public static string ItemKey(int group, int number) => $"{group}:{number}";
+
+    /// <summary>The matching item definitions on this page.</summary>
     public IReadOnlyList<ItemRow> Results { get; private set; } = [];
+
+    /// <summary>How many definitions match in total, across every page.</summary>
+    public int Total { get; private set; }
+
+    /// <summary>1-based page number. NOT called "Page": that would hide PageModel.Page().</summary>
+    public int PageNumber { get; private set; } = 1;
+
+    /// <summary>How many pages the current search fills.</summary>
+    public int PageCount => Math.Max(1, (int)Math.Ceiling(this.Total / (double)PageSize));
+
+    /// <summary>The first row of the current page.</summary>
+    public int FirstRow => this.Total == 0 ? 0 : ((this.PageNumber - 1) * PageSize) + 1;
+
+    /// <summary>The last row of the current page.</summary>
+    public int LastRow => Math.Min(this.PageNumber * PageSize, this.Total);
+
+    /// <summary>
+    /// The Build link for one row: selects that item and keeps the current search and page.
+    ///
+    /// It deliberately does NOT set the group filter. Building a sword used to narrow the whole
+    /// list to swords, because the link had to say group=0 to identify the item at all.
+    /// </summary>
+    public string BuildLink(ItemRow item)
+    {
+        var link = $"/admin/items?item={ItemKey(item.Group, item.Number)}";
+
+        if (!string.IsNullOrEmpty(this.Query))
+        {
+            link += $"&q={Uri.EscapeDataString(this.Query)}";
+        }
+
+        if (this.Group is { } group)
+        {
+            link += $"&group={group}";
+        }
+
+        if (this.PageNumber > 1)
+        {
+            link += $"&page={this.PageNumber}";
+        }
+
+        return link;
+    }
+
+    /// <summary>A link to another page of the same search, keeping any built item selected.</summary>
+    public string PageLink(int page)
+    {
+        var link = $"/admin/items?page={page}";
+
+        if (!string.IsNullOrEmpty(this.Query))
+        {
+            link += $"&q={Uri.EscapeDataString(this.Query)}";
+        }
+
+        if (this.Group is { } group)
+        {
+            link += $"&group={group}";
+        }
+
+        // Keeping the selection means paging the list does not throw away a half-built command.
+        if (this.Selected is { } selected)
+        {
+            link += $"&item={ItemKey(selected.Group, selected.Number)}";
+        }
+
+        return link;
+    }
 
     /// <summary>The item the builder is configured for.</summary>
     public ItemRow? Selected { get; private set; }
@@ -88,7 +173,8 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     public async Task OnGetAsync(
         [FromQuery] string? q,
         [FromQuery] int? group,
-        [FromQuery] int? number,
+        [FromQuery] string? item,
+        [FromQuery] int page,
         [FromQuery] int lvl,
         [FromQuery] int[]? exbit,
         [FromQuery] bool sk,
@@ -101,9 +187,18 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     {
         this.Query = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
         this.Group = group;
-        this.Results = await catalog.ItemsAsync(this.Query, group, 300, cancellationToken).ConfigureAwait(false);
+        this.Groups = await catalog.ItemGroupsAsync(cancellationToken).ConfigureAwait(false);
+        this.Total = await catalog.ItemCountAsync(this.Query, group, cancellationToken).ConfigureAwait(false);
 
-        if (group is not { } selectedGroup || number is not { } selectedNumber)
+        // Clamped both ways: ?page=0 and ?page=9999 are one edit of the address bar away, and an
+        // out-of-range OFFSET returns an empty table that looks like "no items match".
+        this.PageNumber = Math.Clamp(page < 1 ? 1 : page, 1, this.PageCount);
+
+        this.Results = await catalog
+            .ItemsAsync(this.Query, group, (this.PageNumber - 1) * PageSize, PageSize, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!TryParseItem(item, out var selectedGroup, out var selectedNumber))
         {
             return;
         }
@@ -184,5 +279,25 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
         }
 
         static int Sum(int[]? bits) => bits is null ? 0 : bits.Where(b => b > 0).Distinct().Sum();
+    }
+
+    /// <summary>
+    /// Reads an `item=group:number` value. Anything malformed selects nothing rather than throwing:
+    /// the value is in the query string, so a stray edit must not 500 the page.
+    /// </summary>
+    private static bool TryParseItem(string? value, out int group, out int number)
+    {
+        group = 0;
+        number = 0;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split(':', 2);
+        return parts.Length == 2
+            && int.TryParse(parts[0], CultureInfo.InvariantCulture, out group)
+            && int.TryParse(parts[1], CultureInfo.InvariantCulture, out number);
     }
 }

@@ -108,6 +108,49 @@ public static class GameEnums
     /// SpawnTrigger - src/DataModel/Configuration/MonsterSpawnArea.cs:13. Persisted as an int in
     /// config."MonsterSpawnArea"."SpawnTrigger".
     /// </summary>
+    /// <summary>
+    /// Item group names, for the /item builder's group picker.
+    ///
+    /// 0-11 and 15 are OpenMU's own names, from the ItemGroups enum in
+    /// src/Persistence/Initialization/Items/ItemGroups.cs. That enum calls 12, 13 and 14 "Orbs",
+    /// "Misc1" and "Misc2", which tells a GM nothing, so those three say what the Season 6
+    /// initializers actually put there: Orbs.cs and PackedJewels.cs write group 12, Wings.cs and
+    /// Pets.cs write 13, and Jewels.cs and Potions.cs write 14.
+    ///
+    /// A group with no name is shown by its number rather than guessed at - a server running a
+    /// different configuration may use groups this list has never heard of.
+    /// </summary>
+    public static class ItemGroup
+    {
+        /// <summary>Where jewels live in Season 6. GmCommands.JewelGroup is the same value.</summary>
+        public const int Jewels = 14;
+
+        public static string? Describe(int group) => group switch
+        {
+            0 => "Swords",
+            1 => "Axes",
+            2 => "Scepters",
+            3 => "Spears",
+            4 => "Bows",
+            5 => "Staffs",
+            6 => "Shields",
+            7 => "Helms",
+            8 => "Armour",
+            9 => "Pants",
+            10 => "Gloves",
+            11 => "Boots",
+            12 => "Orbs & packed jewels",
+            13 => "Wings & pets",
+            14 => "Jewels & potions",
+            15 => "Scrolls",
+            _ => null,
+        };
+
+        /// <summary>The label the picker shows: "8 - Armour", or just "17" for an unknown group.</summary>
+        public static string Label(int group)
+            => Describe(group) is { } name ? $"{group} \u2013 {name}" : group.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public static class SpawnTrigger
     {
         /// <summary>Spawns and respawns on its own.</summary>

@@ -8,7 +8,7 @@
 }
 
 <h1>@a.LoginName</h1>
-<p class="mu-muted" style="margin-top:-8px">
+<p class="mu-muted mu-tight">
     @if (GameEnums.AccountState.IsBanned(a.State))
     {
         <span class="mu-badge mu-badge--banned">@GameEnums.AccountState.Describe(a.State)</span>
@@ -33,7 +33,7 @@
 {
     <div class="mu-notice mu-notice--warn">
         New password for <strong>@a.LoginName</strong>:
-        <span class="mu-mono" style="font-size:1.1em">@password</span><br />
+        <span class="mu-mono mu-mono--lg">@password</span><br />
         This is shown once and is not stored anywhere in readable form. Hand it over now.
     </div>
 }
@@ -118,7 +118,7 @@
 
                 @if (Model.CanResetPassword)
                 {
-                    <hr style="border:0;border-top:1px solid var(--mu-border);margin:16px 0" />
+                    <hr class="mu-rule" />
                     <form method="post">
                         <div class="mu-field">
                             <label class="mu-label" for="ResetConfirm">Your own password</label>

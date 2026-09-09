@@ -52,15 +52,15 @@
             {
                 foreach (var post in Model.News)
                 {
-                    <h3 style="margin-bottom:2px"><a href="/news/@post.Slug">@post.Title</a></h3>
-                    <p class="mu-muted" style="margin:0 0 12px;font-size:.85rem">
+                    <h3 class="mu-tight-b"><a href="/news/@post.Slug">@post.Title</a></h3>
+                    <p class="mu-muted mu-meta">
                         @post.PublishedAt?.ToString("yyyy-MM-dd")
                     </p>
                 }
             }
             else
             {
-                <ol style="margin:0;padding-left:1.2em">
+                <ol class="mu-list mu-list--flush">
                     <li>Create an account here.</li>
                     <li>Download the client and point the launcher at <span class="mu-mono">@Model.ConnectHost</span>.</li>
                     <li>Make a character and pick a server from the list.</li>
@@ -102,7 +102,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="mu-hint" style="margin-bottom:0"><a href="/rankings/level">See the full rankings</a></p>
+                <p class="mu-hint mu-flush"><a href="/rankings/level">See the full rankings</a></p>
             }
         </div>
     </div>

@@ -64,7 +64,7 @@ public sealed class GameCatalogTests : IAsyncLifetime
     {
         Skip.IfNot(Enabled);
 
-        var monsters = await this._catalog.MonstersAsync(null, 100, default);
+        var monsters = await this._catalog.MonstersAsync(null, 0, 100, default);
 
         Assert.NotEmpty(monsters);
         Assert.All(monsters, m => Assert.False(string.IsNullOrWhiteSpace(m.Designation)));
@@ -77,7 +77,7 @@ public sealed class GameCatalogTests : IAsyncLifetime
 
         // The fixture gives Golden Tantallos two Level rows, 104 and 106. A GROUP BY that lost the
         // aggregate would list it twice; MAX must win and the row count must stay one.
-        var monsters = await this._catalog.MonstersAsync("Tantallos", 100, default);
+        var monsters = await this._catalog.MonstersAsync("Tantallos", 0, 100, default);
 
         var monster = Assert.Single(monsters);
         Assert.Equal(106, monster.Level);
@@ -91,7 +91,7 @@ public sealed class GameCatalogTests : IAsyncLifetime
 
         // A plain JOIN instead of a LEFT JOIN would drop it entirely, and a GM searching for it
         // would conclude it does not exist.
-        var monsters = await this._catalog.MonstersAsync("Statueless", 100, default);
+        var monsters = await this._catalog.MonstersAsync("Statueless", 0, 100, default);
 
         var monster = Assert.Single(monsters);
         Assert.Equal(0, monster.Level);
@@ -105,7 +105,7 @@ public sealed class GameCatalogTests : IAsyncLifetime
         Skip.IfNot(Enabled);
 
         // A GM reading a command usually has the number, not the name.
-        var byNumber = await this._catalog.MonstersAsync("78", 100, default);
+        var byNumber = await this._catalog.MonstersAsync("78", 0, 100, default);
 
         var monster = Assert.Single(byNumber);
         Assert.Equal("Golden Tantallos", monster.Designation);
@@ -144,12 +144,12 @@ public sealed class GameCatalogTests : IAsyncLifetime
     {
         Skip.IfNot(Enabled);
 
-        var jewels = await this._catalog.ItemsAsync("jewel", null, 100, default);
+        var jewels = await this._catalog.ItemsAsync("jewel", null, 0, 100, default);
 
         Assert.Equal(3, jewels.Count);
         Assert.All(jewels, j => Assert.Equal(14, j.Group));
 
-        var group0 = await this._catalog.ItemsAsync(null, 0, 100, default);
+        var group0 = await this._catalog.ItemsAsync(null, 0, 0, 100, default);
 
         var weapon = Assert.Single(group0);
         Assert.Equal("Dragon Slayer", weapon.Name);
@@ -190,6 +190,82 @@ public sealed class GameCatalogTests : IAsyncLifetime
         Skip.IfNot(Enabled);
 
         Assert.Null(await this._catalog.ItemAsync(99, 999, default));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Paging. A LIMIT with no OFFSET silently truncated the catalogue: the Season 6 item list runs
+    // to several hundred definitions and only the first 300 were ever reachable.
+    // ---------------------------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task ItemPagesDoNotSkipOrRepeatARow()
+    {
+        Skip.IfNot(Enabled);
+
+        var total = await this._catalog.ItemCountAsync(null, null, default);
+        Assert.Equal(6, total);
+
+        var whole = await this._catalog.ItemsAsync(null, null, 0, 100, default);
+
+        // Two pages of four and two, walked the way the pager walks them.
+        var first = await this._catalog.ItemsAsync(null, null, 0, 4, default);
+        var second = await this._catalog.ItemsAsync(null, null, 4, 4, default);
+
+        Assert.Equal(4, first.Count);
+        Assert.Equal(2, second.Count);
+        Assert.Equal(
+            whole.Select(i => (i.Group, i.Number)),
+            first.Concat(second).Select(i => (i.Group, i.Number)));
+    }
+
+    [SkippableFact]
+    public async Task AnOffsetPastTheEndIsEmptyRatherThanWrappingAround()
+    {
+        Skip.IfNot(Enabled);
+
+        Assert.Empty(await this._catalog.ItemsAsync(null, null, 500, 50, default));
+        Assert.Empty(await this._catalog.MonstersAsync(null, 500, 50, default));
+    }
+
+    [SkippableFact]
+    public async Task TheCountMatchesTheFilterTheListingUses()
+    {
+        Skip.IfNot(Enabled);
+
+        // A count that disagrees with the listing gives a pager with pages that come back empty.
+        foreach (var (search, group) in new (string?, int?)[] { (null, null), ("jewel", null), (null, 14), ("nope", null) })
+        {
+            var counted = await this._catalog.ItemCountAsync(search, group, default);
+            var listed = await this._catalog.ItemsAsync(search, group, 0, 1000, default);
+            Assert.Equal(listed.Count, counted);
+        }
+
+        foreach (var search in new string?[] { null, "tantallos", "78", "nope" })
+        {
+            var counted = await this._catalog.MonsterCountAsync(search, default);
+            var listed = await this._catalog.MonstersAsync(search, 0, 1000, default);
+            Assert.Equal(listed.Count, counted);
+        }
+    }
+
+    [SkippableFact]
+    public async Task MonstersAreOrderedTotallySoPagingIsStable()
+    {
+        Skip.IfNot(Enabled);
+
+        // Level and name alone do not order the list uniquely, and PostgreSQL is free to return
+        // tied rows in any order per query - which makes OFFSET skip one row and repeat another.
+        var oneAtATime = new List<int>();
+        for (var offset = 0; offset < 3; offset++)
+        {
+            var page = await this._catalog.MonstersAsync(null, offset, 1, default);
+            oneAtATime.Add(Assert.Single(page).Number);
+        }
+
+        var allAtOnce = await this._catalog.MonstersAsync(null, 0, 3, default);
+
+        Assert.Equal(allAtOnce.Select(m => m.Number), oneAtATime);
+        Assert.Equal(3, oneAtATime.Distinct().Count());
     }
 
     // ---------------------------------------------------------------------------------------------
