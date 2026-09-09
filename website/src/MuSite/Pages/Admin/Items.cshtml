@@ -33,7 +33,7 @@
                             <select class="mu-input" id="lvl" name="lvl">
                                 @for (var value = 0; value <= selected.MaximumItemLevel; value++)
                                 {
-                                    <option value="@value" selected="@((Model.Request?.Level ?? 0) == value)">
+                                    <option value="@value" selected="@((Model.Requested?.Level ?? 0) == value)">
                                         @(value == 0 ? "+0 (plain)" : "+" + value)
                                     </option>
                                 }
@@ -50,7 +50,7 @@
                     <div class="mu-field">
                         <span class="mu-label">Extras</span>
                         <label style="display:block">
-                            <input id="sk" name="sk" type="checkbox" value="true" checked="@(Model.Request?.Skill ?? false)" />
+                            <input id="sk" name="sk" type="checkbox" value="true" checked="@(Model.Requested?.Skill ?? false)" />
                             Skill
                             @if (selected.SkillNumber is null)
                             {
@@ -62,7 +62,7 @@
                             }
                         </label>
                         <label style="display:block">
-                            <input id="lu" name="lu" type="checkbox" value="true" checked="@(Model.Request?.Luck ?? false)" />
+                            <input id="lu" name="lu" type="checkbox" value="true" checked="@(Model.Requested?.Luck ?? false)" />
                             Luck <span class="mu-muted">&mdash; +5% critical damage chance</span>
                         </label>
                     </div>
@@ -84,14 +84,14 @@
                     else
                     {
                         <p class="mu-hint" style="margin:0 0 6px">
-                            Tick any of the six. Each is worth a value that is added together into
-                            <code>ex=</code>; that number is why the same <code>ex</code> means a different
-                            bonus on a weapon than on a shield.
+                            Tick what the item should have. Each is worth a value, and they are added
+                            together into <code>ex=</code> &mdash; which is why the same <code>ex</code>
+                            means a different bonus on a weapon than on a shield.
                         </p>
                         <div>
                             @foreach (var option in Model.ExcellentOptions)
                             {
-                                var ticked = ((Model.Request?.ExcellentNumber ?? 0) & option.BitValue) != 0;
+                                var ticked = ((Model.Requested?.ExcellentNumber ?? 0) & option.BitValue) != 0;
                                 <label style="display:block">
                                     <input name="exbit" type="checkbox" value="@option.BitValue" checked="@ticked" />
                                     @OptionText.Describe(option)
@@ -117,7 +117,7 @@
                         <div>
                             @foreach (var (bit, option) in Model.DinorantOptions)
                             {
-                                var ticked = ((Model.Request?.Opt ?? 0) & bit) != 0;
+                                var ticked = ((Model.Requested?.Opt ?? 0) & bit) != 0;
                                 <label style="display:block">
                                     <input name="optbit" type="checkbox" value="@bit" checked="@ticked" />
                                     @OptionText.Describe(option)
@@ -136,10 +136,10 @@
                     else
                     {
                         <select class="mu-input" style="max-width:420px" id="opt" name="opt">
-                            <option value="0" selected="@((Model.Request?.Opt ?? 0) == 0)">None</option>
+                            <option value="0" selected="@((Model.Requested?.Opt ?? 0) == 0)">None</option>
                             @foreach (var level in Model.OptionLevels)
                             {
-                                <option value="@level.Level" selected="@((Model.Request?.Opt ?? 0) == level.Level)">
+                                <option value="@level.Level" selected="@((Model.Requested?.Opt ?? 0) == level.Level)">
                                     @OptionText.Describe(level) (level @level.Level)
                                 </option>
                             }
@@ -172,8 +172,8 @@
                     }
                     else
                     {
-                        var chosenAncient = Model.Request?.Ancient ?? 0;
-                        var chosenLevel = Model.Request?.AncientBonusLevel ?? 1;
+                        var chosenAncient = Model.Requested?.Ancient ?? 0;
+                        var chosenLevel = Model.Requested?.AncientBonusLevel ?? 1;
                         var chosenSet = Model.AncientSets.FirstOrDefault(s => s.Discriminator == chosenAncient)
                                         ?? Model.AncientSets[0];
                         var bonusName = chosenSet.BonusAttribute ?? "the set's bonus stat";

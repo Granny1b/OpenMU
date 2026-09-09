@@ -34,8 +34,11 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
     /// <summary>The item the builder is configured for.</summary>
     public ItemRow? Selected { get; private set; }
 
-    /// <summary>What the builder was asked for.</summary>
-    public ItemRequest? Request { get; private set; }
+    /// <summary>
+    /// What the builder was asked for. Named Requested rather than Request because PageModel
+    /// already has a Request - the HttpRequest - and shadowing it on a page is a trap.
+    /// </summary>
+    public ItemRequest? Requested { get; private set; }
 
     /// <summary>The built command, when the request is valid.</summary>
     public string? Command { get; private set; }
@@ -145,12 +148,12 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
 
         // AncientBonusLevel is 1 server-side when unset, so an unfilled form must not read as 0 -
         // that would trip the "only applies when Ancient is 1 or 2" check on every plain item.
-        this.Request = new ItemRequest(
+        this.Requested = new ItemRequest(
             selectedGroup, selectedNumber, lvl, excellent, sk, lu, option, anc, ancLvl <= 0 ? 1 : ancLvl);
 
         var problems = GmCommands.ValidateItem(
             this.Selected,
-            this.Request,
+            this.Requested,
             excellentMask: this.ExcellentOptions.Aggregate(0, (mask, o) => mask | o.BitValue),
 
             // null, not 0: a Dinorant's opt is not a level at all, so there is no maximum level to
@@ -177,7 +180,7 @@ public sealed class ItemsModel(GameCatalog catalog) : PageModel
         // reject is worse than handing over nothing, because the failure happens in game.
         if (this.Problems.Count == 0)
         {
-            this.Command = GmCommands.BuildItem(this.Request);
+            this.Command = GmCommands.BuildItem(this.Requested);
         }
 
         static int Sum(int[]? bits) => bits is null ? 0 : bits.Where(b => b > 0).Distinct().Sum();
