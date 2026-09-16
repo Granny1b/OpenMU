@@ -53,6 +53,19 @@ public sealed class SiteOptions
     public int MetricsRetentionDays { get; set; } = 14;
 
     /// <summary>
+    /// How often /admin/metrics/live re-reads the machine's vitals, in seconds. Clamped to 2 - 60.
+    /// </summary>
+    /// <remarks>
+    /// This is NOT the collection interval of the charts, and raising the resolution here costs
+    /// nothing in the database: <see cref="Live.HostVitals"/> keeps a single sample in memory and
+    /// persists none of it, so the whole tick is three small reads out of /proc. Vector stays at 30
+    /// seconds, which is what the history and the bucket alignment with the game series depend on.
+    /// The page asks the browser to reload itself on the same interval, so a shorter one means more
+    /// page renders, not more measurement.
+    /// </remarks>
+    public int LiveVitalsSeconds { get; set; } = 5;
+
+    /// <summary>
     /// Full URL of OpenMU's status endpoint, e.g. <c>http://openmu-startup:8080/api/status</c>.
     /// Empty disables the exact player count; load percentage still comes from the connect server.
     /// </summary>
