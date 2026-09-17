@@ -111,6 +111,12 @@ builder.Services.AddOutputCache();
 builder.Services.AddSingleton<ServerProbe>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ServerProbe>());
 
+// The live vitals tile. Registered the same way as the probe - one singleton, resolved both as the
+// hosted service that refreshes it and as the object the page reads - so the page sees the SAME
+// instance rather than a second, never-started copy that would always read "not read yet".
+builder.Services.AddSingleton<HostVitals>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HostVitals>());
+
 // ---------------------------------------------------------------------------------------------
 // The key ring signs the auth cookie. It is written to /app/keys, which the Dockerfile creates as
 // mode 700 owned by the app user - NOT the chmod 777 used for the game server's key directory.

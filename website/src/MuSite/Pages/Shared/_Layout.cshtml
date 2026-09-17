@@ -9,6 +9,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@(ViewData["Title"] is null ? serverName : $"{ViewData["Title"]} - {serverName}")</title>
+    @* A page that wants to reload itself sets ViewData["RefreshSeconds"]. This is the only way to
+       do it on this site: the CSP has no script-src, so setInterval and EventSource are dropped,
+       and a meta refresh is plain HTML that needs no exception to the policy. *@
+    @if (ViewData["RefreshSeconds"] is int refreshSeconds)
+    {
+        <meta http-equiv="refresh" content="@refreshSeconds" />
+    }
     <link rel="stylesheet" href="~/css/mu.css" asp-append-version="true" />
     <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
 </head>

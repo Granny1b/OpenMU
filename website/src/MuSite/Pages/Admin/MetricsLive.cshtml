@@ -1,0 +1,88 @@
+@page "/admin/metrics/live"
+@using MuSite.Services
+@model MuSite.Pages.Admin.MetricsLiveModel
+@{
+    ViewData["Title"] = "Live vitals";
+    var vitals = Model.Vitals;
+    var game = Model.Game;
+}
+
+@* NO INLINE STYLE ATTRIBUTES AND NO SCRIPT ON THIS PAGE, for the same reason as /admin/metrics:
+   the CSP sets style-src 'self' with no 'unsafe-inline' and has no script-src at all, so both are
+   dropped silently. The reload is a <meta http-equiv="refresh"> emitted by the layout from
+   ViewData["RefreshSeconds"] - plain HTML, which needs no exception to the policy. *@
+
+<h1>Live vitals</h1>
+<p class="mu-muted mu-tight">
+    The machine, re-read every @Model.RefreshSeconds seconds straight from the kernel. Nothing here
+    touches the database. For history and the game series, see
+    <a href="/admin/metrics">Server health</a>.
+</p>
+
+@if (vitals.Problem is { Length: > 0 } problem)
+{
+    <div class="mu-notice mu-notice--warn">
+        <strong>The machine's vitals could not be read.</strong>
+        <p class="mu-flush">@problem</p>
+    </div>
+}
+
+<div class="mu-stats">
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(vitals.CpuPercent is null ? "—" : $"{vitals.CpuPercent:0}%")</span>
+        <span class="mu-stat__label">CPU</span>
+        <span class="mu-bar"><span class="mu-bar__fill @BarStep.For(vitals.CpuPercent ?? 0, 100)"></span></span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(vitals.MemoryUsedPercent is null ? "—" : $"{vitals.MemoryUsedPercent:0}%")</span>
+        <span class="mu-stat__label">
+            Memory &middot; @MuSite.Pages.Admin.MetricsLiveModel.Gibibytes(vitals.MemoryAvailableBytes) free
+            of @MuSite.Pages.Admin.MetricsLiveModel.Gibibytes(vitals.MemoryTotalBytes)
+        </span>
+        <span class="mu-bar"><span class="mu-bar__fill @BarStep.For(vitals.MemoryUsedPercent ?? 0, 100)"></span></span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(vitals.Load1 is null ? "—" : $"{vitals.Load1:0.00}")</span>
+        <span class="mu-stat__label">Load 1m @(vitals.CpuCount > 0 ? $"of {vitals.CpuCount} cores" : string.Empty)</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(vitals.Load5 is null ? "—" : $"{vitals.Load5:0.00}")</span>
+        <span class="mu-stat__label">Load 5m</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(vitals.Load15 is null ? "—" : $"{vitals.Load15:0.00}")</span>
+        <span class="mu-stat__label">Load 15m</span>
+    </div>
+</div>
+
+<h2>Game server</h2>
+<p class="mu-muted mu-tight">
+    Still the 30 second probe &mdash; speeding it up would mean a connect server handshake every few
+    seconds, which is the one reading here that is not free.
+</p>
+
+<div class="mu-stats">
+    <div class="mu-stat">
+        <span class="mu-stat__value @(game.IsUp ? "mu-stat__value--up" : "mu-stat__value--down")">
+            @(game.IsUp ? "Online" : "Offline")
+        </span>
+        <span class="mu-stat__label">Status &middot; @MuSite.Pages.Admin.MetricsLiveModel.Age(game.CheckedAt)</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(game.Players?.ToString() ?? "—")</span>
+        <span class="mu-stat__label">Players now</span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(game.LoadPercent is null ? "—" : $"{game.LoadPercent}%")</span>
+        <span class="mu-stat__label">Busiest game server</span>
+        <span class="mu-bar"><span class="mu-bar__fill @BarStep.For(game.LoadPercent ?? 0, 100)"></span></span>
+    </div>
+    <div class="mu-stat">
+        <span class="mu-stat__value">@(game.Servers?.ToString() ?? "—")</span>
+        <span class="mu-stat__label">Game servers listed</span>
+    </div>
+</div>
+
+<p class="mu-muted">
+    Machine read @MuSite.Pages.Admin.MetricsLiveModel.Age(vitals.At).
+</p>
