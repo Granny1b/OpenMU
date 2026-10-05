@@ -22,6 +22,14 @@ public class PickupItemAction
     /// <param name="dropId">The drop identifier.</param>
     public async ValueTask PickupItemAsync(Player player, ushort dropId)
     {
+        if (player.BackupInventory is not null)
+        {
+            // While trading or crafting, the inventory has a backup which may be restored later,
+            // which would make the picked up item disappear.
+            await player.InvokeViewPlugInAsync<IItemPickUpFailedPlugIn>(p => p.ItemPickUpFailedAsync(ItemPickFailReason.General)).ConfigureAwait(false);
+            return;
+        }
+
         var droppedLocateable = player.CurrentMap?.GetDrop(dropId);
 
         switch (droppedLocateable)

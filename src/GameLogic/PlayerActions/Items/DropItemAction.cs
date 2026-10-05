@@ -24,7 +24,11 @@ public class DropItemAction
     {
         var item = player.Inventory?.GetItem(slot);
 
+        // While trading or crafting, the inventory has a backup which may be restored later. Dropping an
+        // item then would put it on the ground and back into the inventory, so it's not allowed.
         if (item is null
+            || player.PlayerState.CurrentState != PlayerState.EnteredWorld
+            || player.BackupInventory is not null
             || !(player.CurrentMap?.Terrain.WalkMap[target.X, target.Y] ?? false))
         {
             await player.InvokeViewPlugInAsync<IItemDropResultPlugIn>(p => p.ItemDropResultAsync(slot, false)).ConfigureAwait(false);

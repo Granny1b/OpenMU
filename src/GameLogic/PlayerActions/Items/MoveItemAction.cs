@@ -39,8 +39,10 @@ public class MoveItemAction
     /// <param name="toStorage">To storage.</param>
     public async ValueTask MoveItemAsync(Player player, byte fromSlot, Storages fromStorage, byte toSlot, Storages toStorage)
     {
-        if (!this.IsMoveAllowed(player, fromStorage, toStorage))
+        if (!this.IsMoveAllowed(player, fromStorage, toStorage)
+            || (fromStorage == toStorage && fromSlot == toSlot))
         {
+            // Moving an item onto itself would stack it with itself, doubling its stack size.
             await player.InvokeViewPlugInAsync<IItemMoveFailedPlugIn>(p => p.ItemMoveFailedAsync(null)).ConfigureAwait(false);
             return;
         }
@@ -78,7 +80,10 @@ public class MoveItemAction
             case Movement.PartiallyStack when toItemStorage?.GetItem(toSlot) is { } targetItem:
                 await this.PartiallyStackAsync(player, item, targetItem).ConfigureAwait(false);
                 break;
-            case Movement.CompleteStack when toItemStorage?.GetItem(toSlot) is { } targetItem:
+            case Movement.CompleteStack when toItemStorage?.GetItem(toSlot) is { } targetItem && targetItem != item && player.BackupInventory is null:
+                // While a backup of the inventory exists (trade or crafting dialog), a complete stack is not
+                // allowed: the backup only restores the slots of the items, so restoring it would bring back
+                // the removed source item, while the target keeps the merged stack size.
                 await this.FullStackAsync(player, fromItemStorage!, item, targetItem).ConfigureAwait(false);
                 break;
             default:
@@ -160,6 +165,12 @@ public class MoveItemAction
             {
                 await tradingPartner.InvokeViewPlugInAsync<ITradeItemAppearPlugIn>(p => p.TradeItemAppearAsync(toSlot, item)).ConfigureAwait(false);
             }
+
+            // Like a change of the trade money, a change of the offered items resets the acceptance of the
+            // partner. Otherwise, an item could be taken back after the partner accepted the trade.
+            await tradingPartner.PlayerState.TryAdvanceToAsync(PlayerState.TradeOpened).ConfigureAwait(false);
+            await player.InvokeViewPlugInAsync<IChangeTradeButtonStatePlugIn>(p => p.ChangeTradeButtonStateAsync(TradeButtonState.Red)).ConfigureAwait(false);
+            await tradingPartner.InvokeViewPlugInAsync<IChangeTradeButtonStatePlugIn>(p => p.ChangeTradeButtonStateAsync(TradeButtonState.Red)).ConfigureAwait(false);
         }
     }
 

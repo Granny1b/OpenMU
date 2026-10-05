@@ -45,6 +45,13 @@ public class BaseTradeAction
                 return;
             }
 
+            // The trading money was taken from the inventory when it was set, so it's given back.
+            // The money of the backup inventory doesn't help here: it's not the money of the character.
+            if (trader.TradingMoney > 0)
+            {
+                trader.Money = (int)Math.Min(int.MaxValue, (long)trader.Money + trader.TradingMoney);
+            }
+
             trader.TradingMoney = 0;
             if (trader.BackupInventory != null)
             {

@@ -21,11 +21,22 @@ public class CloseNpcDialogAction
     {
         using var loggerScope = player.Logger.BeginScope(this.GetType());
         var npc = player.OpenedNpc;
+        var wasInNpcDialog = player.PlayerState.CurrentState == PlayerState.NpcDialogOpened;
         if (npc != null && await player.PlayerState.TryAdvanceToAsync(PlayerState.EnteredWorld).ConfigureAwait(false))
         {
             player.Logger.LogDebug($"Player {player.SelectedCharacter?.Name} closes NPC {player.OpenedNpc}");
             player.OpenedNpc = null;
             player.Vault = null;
+
+            // The backup of a crafting dialog must not survive the dialog. Otherwise, it would be restored
+            // when the player disconnects later, reverting the inventory (including money) to the state when
+            // the dialog was opened, while everything moved to the vault in the meantime stays there.
+            // Items which are left in the crafting storage are still returned at disconnect.
+            if (wasInNpcDialog)
+            {
+                player.BackupInventory = null;
+            }
+
             await player.InvokeViewPlugInAsync<INpcDialogClosedPlugIn>(p => p.DialogClosedAsync(npc.Definition)).ConfigureAwait(false);
             if (npc.Id == ChaosGoblinId)
             {

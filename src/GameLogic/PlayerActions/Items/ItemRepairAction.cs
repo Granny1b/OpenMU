@@ -35,7 +35,7 @@ public class ItemRepairAction
             return;
         }
 
-        if ((byte)item.Durability == item.GetMaximumDurabilityOfOnePiece())
+        if (!CanBeRepaired(item) || item.Durability >= item.GetMaximumDurabilityOfOnePiece())
         {
             return;
         }
@@ -82,7 +82,7 @@ public class ItemRepairAction
                 continue;
             }
 
-            if ((int)item.Durability == item.GetMaximumDurabilityOfOnePiece())
+            if (!CanBeRepaired(item) || item.Durability >= item.GetMaximumDurabilityOfOnePiece())
             {
                 continue;
             }
@@ -100,10 +100,25 @@ public class ItemRepairAction
         }
     }
 
+    /// <summary>
+    /// Determines whether the item can be repaired at all.
+    /// For items which are not wearable, the durability is the size of the stack, and ammunition is
+    /// consumed instead of repaired. Repairing such items resulted in a negative price.
+    /// </summary>
+    private static bool CanBeRepaired(Item item)
+    {
+        return item.IsWearable() && item.Definition is { IsAmmunition: false };
+    }
+
     private static bool IsMoneySufficient(Player player, Item item)
     {
         var priceCalculator = new ItemPriceCalculator();
         var price = priceCalculator.CalculateRepairPrice(item, player.OpenedNpc != null);
+        if (price < 0 || price > int.MaxValue)
+        {
+            return false;
+        }
+
         return player.TryRemoveMoney((int)price);
     }
 }

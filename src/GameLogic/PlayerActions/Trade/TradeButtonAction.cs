@@ -32,6 +32,7 @@ public class TradeButtonAction : BaseTradeAction
 
         if (trader.PlayerState.CurrentState == PlayerState.TradeButtonPressed
             && tradingPartner is not null
+            && tradingPartner.TradingPartner == trader
             && tradingPartner.PlayerState.CurrentState == PlayerState.TradeButtonPressed)
         {
             TradeResult result = await this.InternalFinishTradeAsync(trader, tradingPartner).ConfigureAwait(false);
@@ -75,6 +76,24 @@ public class TradeButtonAction : BaseTradeAction
             partnerContext.Allowed = false;
             (trader as Player)?.Logger.LogDebug($"Unexpected player states. {trader.Name}:{trader.PlayerState}, {tradingPartner.Name}:{tradingPartner.PlayerState}");
             return TradeResult.Cancelled;
+        }
+
+        if (tradingPartner.TradingPartner != trader)
+        {
+            // The partner is trading with someone else in the meantime, e.g. after a re-login.
+            context.Allowed = false;
+            partnerContext.Allowed = false;
+            return TradeResult.Cancelled;
+        }
+
+        long maximumMoney = trader.GameContext.Configuration?.MaximumInventoryMoney ?? int.MaxValue;
+        if ((long)trader.Money + tradingPartner.TradingMoney > maximumMoney
+            || (long)tradingPartner.Money + trader.TradingMoney > maximumMoney)
+        {
+            // Adding the money would overflow or exceed the maximum - the money would be lost or wrap around.
+            await this.SendMessageAsync(trader, nameof(PlayerMessage.InventoryFull)).ConfigureAwait(false);
+            await this.SendMessageAsync(tradingPartner, nameof(PlayerMessage.InventoryFull)).ConfigureAwait(false);
+            return TradeResult.FailedByFullInventory;
         }
 
         using var itemContext = trader.GameContext.PersistenceContextProvider.CreateNewTradeContext();
