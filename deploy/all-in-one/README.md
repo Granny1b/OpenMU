@@ -13,6 +13,11 @@ Short version, for a local test:
 docker compose up -d --no-build
 ```
 
-The admin panel is then available at http://localhost/ with the user `admin` and
-the password `openmu` — [change that](../../docs-website/docs/admin-panel/users.md)
-before the server is reachable from the internet.
+The admin panel is then available at http://localhost:8081/ (loopback only). On a
+fresh installation it has no user yet and is reachable without a login until one is
+created — [create one](../../docs-website/docs/admin-panel/users.md), or set
+`OPENMU_ADMIN_USER` and `OPENMU_ADMIN_PASSWORD`, before the server is reachable from
+the internet. The production chain (`docker-compose.prod.yml`) requires them.
+
+`munique/openmu` is the published upstream image; to run the server built from the
+sources of this repository, add `docker-compose.local-build.yml` to the chain.

@@ -5,8 +5,11 @@ services:
       context: ../../src
       dockerfile: Startup/Dockerfile
     restart: "no"
+    # Bound to the loopback: docker compose loads this file automatically whenever no -f is given,
+    # also on a server. Published on 0.0.0.0, the admin panel would be reachable from the internet
+    # over plain HTTP, bypassing nginx.
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
 
   mu-site:
     restart: "no"
@@ -14,5 +17,7 @@ services:
   database:
     # Local development only. The production command does not include this override file, and the
     # base compose deliberately publishes no database port at all.
+    # Bound to the loopback for the same reason - on 0.0.0.0, PostgreSQL would be reachable from the
+    # internet (Docker publishes ports past host firewalls like ufw).
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"

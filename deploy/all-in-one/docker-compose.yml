@@ -11,6 +11,8 @@ services:
       - mu-site
 
   openmu-startup:
+    # The published upstream image. It doesn't contain changes made to ../../src in this repository;
+    # to run those, add docker-compose.local-build.yml to the chain (see the comment in that file).
     image: munique/openmu
     container_name: openmu-startup
     ports:
@@ -34,6 +36,10 @@ services:
       - "55980:55980"
     environment:
       DB_HOST: database
+      # The password of the PostgreSQL superuser, see the database service. Set DB_ADMIN_PW in .env.
+      # Only images which read DB_ADMIN_PW honour it (the one built by docker-compose.local-build.yml
+      # does) - with an older image, keep the default, or the server can't reach its database.
+      DB_ADMIN_PW: ${DB_ADMIN_PW:-admin}
       ASPNETCORE_URLS: http://+:8080
       # Optional bootstrap admin panel user. Without it, the admin panel is reachable
       # without a login until the first user has been created within the panel itself.
@@ -152,7 +158,10 @@ services:
     image: postgres
     container_name: database
     environment:
-      POSTGRES_PASSWORD: admin
+      # Set DB_ADMIN_PW in .env. The default "admin" is publicly known; it's only kept so that existing
+      # installations keep working. Note that this value is only applied when the volume is created -
+      # for an existing database, change it with ALTER ROLE postgres PASSWORD '...' as well.
+      POSTGRES_PASSWORD: ${DB_ADMIN_PW:-admin}
       POSTGRES_DB: openmu
       POSTGRES_USER: postgres
     # Deliberately NOT published. `ports: - "5432"` binds a random host port on 0.0.0.0, which

@@ -3,6 +3,11 @@ services:
     restart: "unless-stopped"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # Mandatory on a server: without a bootstrap user, the admin panel - which is served on
+      # admin.<your-domain> - is reachable without a login until the first user has been created,
+      # and whoever comes first can create it.
+      OPENMU_ADMIN_USER: ${OPENMU_ADMIN_USER:?Set OPENMU_ADMIN_USER in .env - see docker-compose.yml}
+      OPENMU_ADMIN_PASSWORD: ${OPENMU_ADMIN_PASSWORD:?Set OPENMU_ADMIN_PASSWORD in .env - see docker-compose.yml}
 
   database:
     restart: "unless-stopped"

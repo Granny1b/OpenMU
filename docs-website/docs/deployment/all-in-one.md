@@ -41,8 +41,16 @@ The first command builds the [public website](website.md), which has no publishe
 then starts everything without rebuilding OpenMU itself from source.
 
 That's it. The website is available on your local computer through a loopback IP, and the admin
-panel moves to [http://admin.localhost/](http://admin.localhost/) — the panel occupies `/` and
-cannot be sub-pathed, so the two need separate hostnames.
+panel moves to [http://localhost:8081/](http://localhost:8081/) — the panel occupies `/` and
+cannot be sub-pathed, so the two need separate ports. There is deliberately no `admin.localhost`
+hostname on port 80: the Host header is chosen by the client, so on a server anyone could use it.
+
+:::info[Running the server from this repository's sources]
+`munique/openmu` is the published upstream image. It doesn't contain changes made to `src/` in this
+repository, e.g. security fixes which aren't released upstream yet. To build and run the server
+from the sources here, add `docker-compose.local-build.yml` to the chain - see the comment in that
+file.
+:::
 
 If you want to make it available through the internet, choose option B.
 
@@ -102,8 +110,9 @@ playing right away.
 
 Additionally, take a look at the [admin panel](../admin-panel/overview.md). If
 your containers run on docker at your local machine, you can simply go to
-[http://admin.localhost/](http://admin.localhost/) — `http://localhost/` now serves the
-[public website](website.md) instead.
+[http://localhost:8081/](http://localhost:8081/) — `http://localhost/` now serves the
+[public website](website.md) instead. Port 8081 is published by
+`docker-compose.override.yml`, on the loopback address only.
 
 :::danger[Create a user before you expose the server]
 Until the first admin panel user exists, the panel is reachable without a login.

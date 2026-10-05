@@ -6,9 +6,16 @@ description: The accounts which are created automatically when the database is i
 
 # Test accounts
 
-To test some features of the server, test accounts are created automatically when
-the database is initialized — if you kept the *test accounts* option enabled on
-the [Setup page](../admin-panel/setup.md).
+To test some features of the server, test accounts can be created when the
+database is initialized:
+
+* on the [Setup page](../admin-panel/setup.md), with the *test accounts* option,
+* when the server initializes the database by itself (e.g. on the first start of
+  the docker image), only if it's started with `-demo` or `-testaccounts`, or
+  with the setting `Database:CreateTestAccounts` set to `true` (as environment
+  variable: `Database__CreateTestAccounts=true`). Without one of these, no test
+  accounts are created, so that a server which is initialized on the internet
+  doesn't get them.
 
 The **password of each of these accounts is the same as the user name**.
 

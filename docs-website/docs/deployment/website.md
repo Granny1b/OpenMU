@@ -104,14 +104,14 @@ The website has no published image, so it is always built locally. `--no-build` 
 command keeps docker compose from rebuilding OpenMU itself from source.
 
 The website answers on [http://localhost/](http://localhost/) and the admin panel moves to
-[http://admin.localhost/](http://admin.localhost/) — current browsers resolve `*.localhost` to the
-loopback address without any `/etc/hosts` entry.
+[http://localhost:8081/](http://localhost:8081/), which `docker-compose.override.yml` publishes on
+the loopback address only.
 
 ## Reaching the admin panel on a server with no domain yet
 
-`admin.localhost` only works on the machine running Docker: your browser resolves it to **your own**
-loopback address, not the server's. On a server you reach by IP address there is no hostname that
-gets you to the panel, and the website now occupies port 80.
+On a server you reach by IP address there is no hostname that gets you to the panel, and the
+website now occupies port 80. (There is deliberately no `admin.localhost` hostname on port 80 either:
+the Host header is chosen by the client, so anyone on the internet could use it.)
 
 The panel is not published on a port of its own either, deliberately — see the comment on
 `openmu-startup.ports` in `docker-compose.yml`. Publishing it would put an administrative interface

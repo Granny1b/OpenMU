@@ -1,0 +1,24 @@
+# Runs the OpenMU server built from the sources of THIS repository, instead of the published upstream
+# image munique/openmu.
+#
+# The published image doesn't contain changes made to ../../src here - for example security fixes
+# which aren't released upstream yet. Its "latest" tag is also only updated when the upstream version
+# number changes, so it can lag behind the upstream sources by months.
+#
+# Append it to the chain, e.g. for production:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.local-build.yml build openmu-startup mu-site
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.local-build.yml up -d --no-build
+#
+# or put the chain into COMPOSE_FILE in .env (separated by ":"). After pulling new sources, build again.
+#
+# The trade-off: "docker compose pull" is no longer the upgrade path for the server - you build the
+# server yourself, like the website.
+services:
+
+  openmu-startup:
+    # A local image name, so that compose builds it instead of pulling the published one.
+    image: openmu-startup-local
+    build:
+      context: ../../src
+      dockerfile: Startup/Dockerfile

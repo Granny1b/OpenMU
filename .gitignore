@@ -332,3 +332,9 @@ data-protection-keys/
 # pattern. Un-ignore the directory explicitly.
 !website/tests/fixtures/
 !website/tests/fixtures/**
+
+# Secrets of a deployment: the compose .env files hold database role passwords, the admin panel
+# bootstrap password and API keys, and certbot/ holds the TLS private keys. They are created inside
+# the checkout on a server, so a careless "git add -A" would publish them.
+.env
+deploy/**/certbot/
