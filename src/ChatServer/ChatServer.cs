@@ -283,12 +283,14 @@ public sealed class ChatServer : IChatServer, IDisposable, IConnectionSource
     /// <param name="clientIndex">Index of the client.</param>
     /// <returns>The random authentication token as a string.</returns>
     /// <remarks>
-    ///  This is the original way of generating the token - not especially secure, but to keep it simple, I leave it that way.
+    ///  The original way of generating the token used just 16 random bits, and the client index for the rest.
+    ///  That's few enough to guess a token of someone else within its lifetime. The index isn't required
+    ///  in the token, so all 32 bits are random.
     /// </remarks>
     private string GetRandomAuthenticationToken(byte clientIndex)
     {
-        var authenticationToken = new byte[] { clientIndex, 0, 0, 0 };
-        this._randomNumberGenerator.GetBytes(authenticationToken, 2, 2);
+        var authenticationToken = new byte[4];
+        this._randomNumberGenerator.GetBytes(authenticationToken);
         var tokenAsString = authenticationToken.MakeDwordBigEndian(0).ToString();
         return tokenAsString;
     }

@@ -211,7 +211,13 @@ internal class ChatClient : IChatClient
             return;
         }
 
-        this.LastActivity = DateTime.Now;
+        if (this._room is not null)
+        {
+            // Only authenticated clients can keep their connection alive. Otherwise, an attacker
+            // could keep an unlimited number of connections open without ever joining a room.
+            this.LastActivity = DateTime.Now;
+        }
+
         switch (this._packetBuffer[2])
         {
             case 0:
@@ -257,6 +263,13 @@ internal class ChatClient : IChatClient
 
     private async ValueTask AuthenticateAsync(Memory<byte> packet)
     {
+        if (packet.Length < Authenticate.Length)
+        {
+            this._logger.LogDebug("Authentication packet is too short.");
+            await this.LogOffAsync().ConfigureAwait(false);
+            return;
+        }
+
         var roomId = NumberConversionExtensions.MakeWord(packet.Span[4], packet.Span[5]);
         var requestedRoom = this._manager.GetChatRoom(roomId);
         if (requestedRoom is null)
