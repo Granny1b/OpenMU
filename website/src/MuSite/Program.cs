@@ -188,6 +188,15 @@ builder.Services.AddRateLimiter(limiter =>
     limiter.AddPolicy(RateLimitPolicies.Login, context => RateLimitPartition.GetFixedWindowLimiter(
         ClientPartition.For(context.Connection.RemoteIpAddress),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
+
+    // The password form checks the current password, so it is throttled like the sign-in. Only the
+    // submissions count: merely opening the page must not use the budget up. The limiter runs before
+    // the authentication, so the account isn't known here - the per-account budget is LoginAttempts.
+    limiter.AddPolicy(RateLimitPolicies.PasswordChange, context => HttpMethods.IsPost(context.Request.Method)
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            ClientPartition.For(context.Connection.RemoteIpAddress),
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 })
+        : RateLimitPartition.GetNoLimiter("password-change-view"));
 });
 
 // AuthorizeFolder below names these policies as STRINGS, and ASP.NET resolves the name per request

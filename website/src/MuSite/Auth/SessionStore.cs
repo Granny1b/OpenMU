@@ -73,26 +73,30 @@ public sealed class SessionStore(SiteDataSources sources)
     }
 
     /// <summary>
-    /// Revokes every session of an account, optionally sparing one.
+    /// Revokes every session of an account, optionally sparing one, and returns the revoked ids.
     ///
     /// Called on a password change (sparing the session that changed it) and on a ban or admin
     /// password reset (sparing nothing) - a stolen session must not outlive the password that
-    /// was changed because of it.
+    /// was changed because of it. The caller has to drop the returned ids from
+    /// <see cref="SessionState"/>, or the revoked sessions stay usable until their cache entry expires.
     /// </summary>
-    public async Task<int> RevokeAllAsync(Guid accountId, Guid? exceptSessionId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Guid>> RevokeAllAsync(Guid accountId, Guid? exceptSessionId, CancellationToken cancellationToken)
     {
         await using var connection = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        return await connection.ExecuteAsync(new CommandDefinition(
+        var ids = await connection.QueryAsync<Guid>(new CommandDefinition(
             """
             UPDATE web_session
                SET revoked_at = now()
              WHERE account_id = @accountId
                AND revoked_at IS NULL
                AND (@exceptSessionId::uuid IS NULL OR id <> @exceptSessionId::uuid)
+            RETURNING id
             """,
             new { accountId, exceptSessionId },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return ids.AsList();
     }
 
     /// <summary>Counts an account's other live sessions, for the "signed in elsewhere" line.</summary>

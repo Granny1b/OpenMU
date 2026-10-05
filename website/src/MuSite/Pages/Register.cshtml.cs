@@ -62,6 +62,10 @@ public sealed class RegisterModel(
                 this.Error = $"The password must be between {this.MinPassword} and {this.MaxPassword} characters.";
                 break;
 
+            case RegisterResult.InvalidEmail:
+                this.Error = $"The email address can be at most {GameAccount.MaxEmailLength} characters.";
+                break;
+
             case RegisterResult.NameTaken:
                 // Deliberately the same wording as InvalidName: a distinct "that name is taken"
                 // turns this form into a way to test which accounts exist.

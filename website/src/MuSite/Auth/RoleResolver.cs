@@ -70,4 +70,33 @@ public sealed class RoleResolver(IOptionsMonitor<SiteOptions> options)
             ? SiteRole.Owner
             : SiteRole.Admin;
     }
+
+    /// <summary>
+    /// The role an account is PROTECTED as when it is the TARGET of an administrative action, from
+    /// the configuration alone - the owner name, or a name on the allowlist.
+    ///
+    /// Deliberately independent of the account state, unlike <see cref="Resolve"/>. A banned
+    /// administrator (or the owner) resolves to <see cref="SiteRole.None"/> there, so a protection
+    /// based on it would let any administrator lift the owner's ban on a rogue colleague, or act on
+    /// the owner whenever the owner's account is not a GameMaster at that moment.
+    /// Matched with Ordinal for the same reason as <see cref="Resolve"/>: a case variant is another
+    /// account. Seeded accounts are never protected - they are never administrators either.
+    /// </summary>
+    public SiteRole ResolveProtection(string? loginName)
+    {
+        if (string.IsNullOrWhiteSpace(loginName) || SeedAccounts.IsSeedName(loginName))
+        {
+            return SiteRole.None;
+        }
+
+        var current = options.CurrentValue;
+        if (!string.IsNullOrWhiteSpace(current.Owner) && string.Equals(loginName, current.Owner, StringComparison.Ordinal))
+        {
+            return SiteRole.Owner;
+        }
+
+        return current.Admins.Where(name => !string.IsNullOrWhiteSpace(name)).Contains(loginName, StringComparer.Ordinal)
+            ? SiteRole.Admin
+            : SiteRole.None;
+    }
 }

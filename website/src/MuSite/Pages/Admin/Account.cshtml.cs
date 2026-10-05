@@ -27,7 +27,10 @@ public sealed class AccountModel(
 
     public string? NewPassword { get; private set; }
 
-    /// <summary>True when the target is an administrator or the owner and cannot be acted on here.</summary>
+    /// <summary>
+    /// True when the target is an administrator or the owner and cannot be acted on here. The target's
+    /// role comes from the configuration alone, whatever state the account is in right now.
+    /// </summary>
     public bool IsProtected => this.TargetRole == SiteRole.Owner
         || (this.TargetRole == SiteRole.Admin && this.User.Role() != SiteRole.Owner);
 
@@ -53,6 +56,15 @@ public sealed class AccountModel(
             return this.NotFound();
         }
 
+        // Before the step-up, so a typo in the form does not cost a confirmation attempt. A Days value
+        // which isn't a number at all binds as null - it must not quietly become a permanent ban.
+        var daysUnreadable = this.ModelState.TryGetValue(nameof(this.Days), out var daysEntry) && daysEntry.Errors.Count > 0;
+        if ((daysUnreadable ? AdminActions.BanDurationError : AdminActions.ValidateBan(this.Days, this.Reason?.Trim())) is { } invalid)
+        {
+            this.Error = invalid;
+            return this.Page();
+        }
+
         var actor = this.Actor();
         if (!await stepUp.ConfirmAsync(actor.LoginName, this.Confirm ?? string.Empty, actor.Ip, "ban", cancellationToken).ConfigureAwait(false))
         {
@@ -62,7 +74,7 @@ public sealed class AccountModel(
             return this.Page();
         }
 
-        var until = this.Days is { } days and > 0 ? DateTimeOffset.UtcNow.AddDays(days) : (DateTimeOffset?)null;
+        var until = this.Days is { } days ? DateTimeOffset.UtcNow.AddDays(days) : (DateTimeOffset?)null;
         var result = await admin.BanAsync(id, until, this.Reason?.Trim() ?? string.Empty, actor, cancellationToken).ConfigureAwait(false);
 
         return this.AfterAction(id, result, until is null ? "Account banned." : $"Account banned until {until:yyyy-MM-dd HH:mm} UTC.", cancellationToken);
@@ -150,7 +162,7 @@ public sealed class AccountModel(
             return false;
         }
 
-        this.TargetRole = roles.Resolve(this.Detail.LoginName, this.Detail.State);
+        this.TargetRole = roles.ResolveProtection(this.Detail.LoginName);
         this.Bans = await admin.GetBanHistoryAsync(id, cancellationToken).ConfigureAwait(false);
         return true;
     }

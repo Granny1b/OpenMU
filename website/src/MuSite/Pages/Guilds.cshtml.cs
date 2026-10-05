@@ -39,8 +39,8 @@ public sealed class GuildsModel(RankingCache cache) : PageModel
 
     public async Task OnGetAsync([FromQuery] int page = 1, [FromQuery] string? q = null, CancellationToken cancellationToken = default)
     {
-        this.PageNumber = Math.Max(1, page);
-        this.Search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        this.PageNumber = PublicQueries.ClampPage(page);
+        this.Search = PublicQueries.NormalizeSearch(q);
 
         var result = await cache.GetGuildsAsync(this.Offset, PageSize + 1, this.Search, cancellationToken).ConfigureAwait(false);
         this.Age = result.Age;

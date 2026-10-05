@@ -62,6 +62,12 @@ public sealed record SiteTotals(int Accounts, int Characters);
 /// </summary>
 public sealed class PublicQueries(SiteDataSources sources)
 {
+    /// <summary>The longest search term: no character name is longer, and guild names are shorter.</summary>
+    public const int MaxSearchLength = 10;
+
+    /// <summary>The highest page number a pager accepts. Far beyond any real board, far below an overflow.</summary>
+    public const int MaxPage = 10_000;
+
     /// <summary>
     /// Deduplicated stats per character, restricted to the three ids the boards need so the
     /// ("DefinitionId", "Value") index is usable.
@@ -131,12 +137,43 @@ public sealed class PublicQueries(SiteDataSources sources)
         return parameters;
     }
 
+    /// <summary>
+    /// Trims a search term and cuts it to <see cref="MaxSearchLength"/>; null when nothing is left.
+    /// Every distinct term is a cache entry in <see cref="Services.RankingCache"/>, so the length is
+    /// bounded before it gets there.
+    /// </summary>
+    public static string? NormalizeSearch(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return null;
+        }
+
+        var trimmed = search.Trim();
+        return trimmed.Length <= MaxSearchLength ? trimmed : trimmed[..MaxSearchLength].TrimEnd();
+    }
+
+    /// <summary>
+    /// Clamps a 1-based page number to 1..<see cref="MaxPage"/>. Unclamped, (page - 1) * size
+    /// overflows into a negative OFFSET, which PostgreSQL rejects with an error page.
+    /// </summary>
+    public static int ClampPage(int page) => Math.Clamp(page, 1, MaxPage);
+
+    /// <summary>
+    /// Escapes the LIKE wildcards in a search term, so '%' and '_' match themselves instead of
+    /// turning a prefix search into a scan for anything. Pairs with ESCAPE '\' in the queries.
+    /// </summary>
+    public static string EscapeLike(string search)
+        => search.Replace("\\", "\\\\", StringComparison.Ordinal)
+                 .Replace("%", "\\%", StringComparison.Ordinal)
+                 .Replace("_", "\\_", StringComparison.Ordinal);
+
     /// <summary>Reads one page of a ranking board.</summary>
     public async Task<IReadOnlyList<RankingRow>> GetRankingAsync(RankingBoard board, int offset, int limit, string? search, CancellationToken cancellationToken)
     {
         var filter = string.IsNullOrWhiteSpace(search)
             ? string.Empty
-            : """ AND lower(c."Name") LIKE lower(@search) || '%' """;
+            : """ AND lower(c."Name") LIKE lower(@search) || '%' ESCAPE '\' """;
 
         var sql = BoardStatsCte + BoardSelect + filter + BoardOrder[board] + " LIMIT @limit OFFSET @offset";
 
@@ -145,7 +182,7 @@ public sealed class PublicQueries(SiteDataSources sources)
         parameters.Add("offset", offset);
         if (filter.Length > 0)
         {
-            parameters.Add("search", search);
+            parameters.Add("search", EscapeLike(search!));
         }
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -160,7 +197,7 @@ public sealed class PublicQueries(SiteDataSources sources)
     {
         var filter = string.IsNullOrWhiteSpace(search)
             ? string.Empty
-            : """ AND lower(c."Name") LIKE lower(@search) || '%' """;
+            : """ AND lower(c."Name") LIKE lower(@search) || '%' ESCAPE '\' """;
 
         // Same predicates as the board, minus the ORDER BY - take the qualifier the board appends
         // and cut it at ORDER BY so the two can never drift apart.
@@ -181,7 +218,7 @@ public sealed class PublicQueries(SiteDataSources sources)
         var parameters = StatParameters();
         if (filter.Length > 0)
         {
-            parameters.Add("search", search);
+            parameters.Add("search", EscapeLike(search!));
         }
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -266,7 +303,7 @@ public sealed class PublicQueries(SiteDataSources sources)
     {
         var filter = string.IsNullOrWhiteSpace(search)
             ? string.Empty
-            : """ WHERE lower(g."Name") LIKE lower(@search) || '%' """;
+            : """ WHERE lower(g."Name") LIKE lower(@search) || '%' ESCAPE '\' """;
 
         // Counts only members the roster page will actually show. Counting raw GuildMember rows
         // instead would list a guild as having members whose profile page then shows nobody, because
@@ -291,7 +328,7 @@ public sealed class PublicQueries(SiteDataSources sources)
         parameters.Add("offset", offset);
         if (filter.Length > 0)
         {
-            parameters.Add("search", search);
+            parameters.Add("search", EscapeLike(search!));
         }
 
         await using var connection = await sources.GameRead.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);

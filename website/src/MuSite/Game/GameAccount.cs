@@ -21,6 +21,9 @@ public enum RegisterResult
 
     /// <summary>Registration is closed.</summary>
     Closed,
+
+    /// <summary>The email address is longer than an email address can be.</summary>
+    InvalidEmail,
 }
 
 /// <summary>The outcome of a sign-in attempt.</summary>
@@ -58,6 +61,12 @@ public sealed record LoginResult(bool Success, Guid AccountId, string LoginName,
 /// </summary>
 public sealed class GameAccount(SiteDataSources sources, IOptionsMonitor<SiteOptions> options, ILogger<GameAccount> logger)
 {
+    /// <summary>The longest login name the game accepts - data."Account"."LoginName" is varchar(10).</summary>
+    public const int MaxLoginNameLength = 10;
+
+    /// <summary>The longest email address there can be (RFC 5321: a 254 character path).</summary>
+    public const int MaxEmailLength = 254;
+
     /// <summary>
     /// A valid BCrypt hash of a value nobody knows, verified against on the account-not-found path so
     /// a wrong name and a wrong password cost the same time. Without it, "no such account" returns in
@@ -71,9 +80,14 @@ public sealed class GameAccount(SiteDataSources sources, IOptionsMonitor<SiteOpt
     {
         var config = options.CurrentValue;
 
-        if (!IsValidLoginName(loginName) || SeedAccounts.IsSeedName(loginName))
+        if (!IsValidLoginName(loginName) || SeedAccounts.IsSeedName(loginName) || IsReservedName(config, loginName))
         {
             return RegisterResult.InvalidName;
+        }
+
+        if (email is { Length: > MaxEmailLength })
+        {
+            return RegisterResult.InvalidEmail;
         }
 
         if (password.Length < config.MinPassword || password.Length > config.MaxPassword)
@@ -139,6 +153,12 @@ public sealed class GameAccount(SiteDataSources sources, IOptionsMonitor<SiteOpt
     /// </summary>
     public async Task<LoginResult> LoginAsync(string loginName, string password, CancellationToken cancellationToken)
     {
+        if (loginName.Length > MaxLoginNameLength)
+        {
+            // No such account can exist, so the database is not asked.
+            return new LoginResult(false, Guid.Empty, string.Empty, 0);
+        }
+
         await using var connection = await sources.GameAuth.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         var account = await connection.QuerySingleOrDefaultAsync<AccountCredentials>(new CommandDefinition(
@@ -265,8 +285,22 @@ public sealed class GameAccount(SiteDataSources sources, IOptionsMonitor<SiteOpt
     /// </summary>
     public static bool IsValidLoginName(string? loginName)
         => !string.IsNullOrWhiteSpace(loginName)
-           && loginName.Length is >= 3 and <= 10
+           && loginName.Length is >= 3 and <= MaxLoginNameLength
            && loginName.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9');
+
+    /// <summary>
+    /// True when the name is one of the configured administrators or the owner, in any capitalisation.
+    ///
+    /// Such a name must not be registrable by just anybody: whoever holds the account under that name
+    /// is one GameMaster state away from the admin area, and a case variant of it would be the
+    /// impersonation the case-insensitive duplicate check exists to prevent. The real accounts are
+    /// created before their names are added to MUSITE_ADMINS / MUSITE_OWNER.
+    /// </summary>
+    public static bool IsReservedName(SiteOptions config, string? loginName)
+        => !string.IsNullOrWhiteSpace(loginName)
+           && config.Admins.Append(config.Owner)
+               .Any(name => !string.IsNullOrWhiteSpace(name)
+                            && string.Equals(name.Trim(), loginName.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private sealed record AccountCredentials(Guid Id, string LoginName, string PasswordHash, int State);
 }

@@ -41,19 +41,21 @@ public sealed class BanExpiryService(
 
     private async Task LiftExpiredAsync(CancellationToken cancellationToken)
     {
-        List<ExpiredBan> expired;
-        await using (var site = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
-        {
-            var rows = await site.QueryAsync<ExpiredBan>(new CommandDefinition(
-                """
-                UPDATE web_ban SET lifted_at = now()
-                 WHERE lifted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= now()
-                RETURNING account_id AS AccountId, login_name AS LoginName, prior_state AS PriorState
-                """,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await using var site = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await site.QueryAsync<ExpiredBan>(new CommandDefinition(
+            """
+            UPDATE web_ban SET lifted_at = now()
+             WHERE lifted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= now()
+            RETURNING account_id AS AccountId, login_name AS LoginName, prior_state AS PriorState, created_at AS CreatedAt
+            """,
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-            expired = rows.AsList();
-        }
+        // Only the newest expired row of an account decides what to restore; an older one records
+        // a state from before an earlier ban.
+        var expired = rows
+            .GroupBy(ban => ban.AccountId)
+            .Select(bans => bans.OrderByDescending(ban => ban.CreatedAt).First())
+            .ToList();
 
         if (expired.Count == 0)
         {
@@ -63,6 +65,21 @@ public sealed class BanExpiryService(
         await using var game = await sources.GameReg.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var ban in expired)
         {
+            // Another ban which is still open - e.g. one placed after this one - is not ended by
+            // this expiry. Restoring the state here would lift it early.
+            var hasOpenBan = await site.ExecuteScalarAsync<bool>(new CommandDefinition(
+                "SELECT EXISTS (SELECT 1 FROM web_ban WHERE account_id = @accountId AND lifted_at IS NULL)",
+                new { accountId = ban.AccountId },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (hasOpenBan)
+            {
+                logger.LogInformation(
+                    "Ban record for {LoginName} expired, but another ban on the account is still open - left as is.",
+                    ban.LoginName);
+                continue;
+            }
+
             // Only move the account if it is still in the temporary-ban state. If an administrator
             // has since made the ban permanent, or the account was changed by hand, the expiry must
             // not quietly undo that.
@@ -90,5 +107,5 @@ public sealed class BanExpiryService(
         }
     }
 
-    private sealed record ExpiredBan(Guid AccountId, string LoginName, int PriorState);
+    private sealed record ExpiredBan(Guid AccountId, string LoginName, int PriorState, DateTimeOffset CreatedAt);
 }

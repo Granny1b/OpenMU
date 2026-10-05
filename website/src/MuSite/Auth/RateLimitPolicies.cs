@@ -8,4 +8,7 @@ public static class RateLimitPolicies
 
     /// <summary>Sign-in attempts, per client address.</summary>
     public const string Login = "login";
+
+    /// <summary>Password change attempts, per client address. Only the form submissions count.</summary>
+    public const string PasswordChange = "password-change";
 }

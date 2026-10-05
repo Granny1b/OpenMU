@@ -52,6 +52,36 @@ public sealed class AdminActions(
     AuditLog audit,
     ILogger<AdminActions> logger)
 {
+    /// <summary>The longest temporary ban, in days. Ten years; anything longer is a permanent ban.</summary>
+    public const int MaxBanDays = 3650;
+
+    /// <summary>The longest ban reason. It is shown on the admin page and written to the audit log.</summary>
+    public const int MaxReasonLength = 200;
+
+    /// <summary>The message for a ban duration out of range.</summary>
+    public static string BanDurationError => $"A temporary ban lasts 1 to {MaxBanDays} days. Leave the field blank for a permanent ban.";
+
+    /// <summary>
+    /// Validates the input of the ban form. Returns the message to show, or null when it is valid.
+    ///
+    /// The form's min/max attributes are a convenience for the browser, not a control: a posted
+    /// Days of 0 or less used to fall through to a PERMANENT ban, and a huge one overflows the date.
+    /// </summary>
+    public static string? ValidateBan(int? days, string? reason)
+    {
+        if (days is { } value && (value < 1 || value > MaxBanDays))
+        {
+            return BanDurationError;
+        }
+
+        if (reason is { Length: > MaxReasonLength })
+        {
+            return $"The reason can be at most {MaxReasonLength} characters.";
+        }
+
+        return null;
+    }
+
     /// <summary>Searches accounts by login name prefix, or by the name of a character on them.</summary>
     public async Task<IReadOnlyList<AccountSearchRow>> SearchAsync(string query, int limit, CancellationToken cancellationToken)
     {
@@ -125,6 +155,11 @@ public sealed class AdminActions(
     /// The web_ban row is written FIRST and the State second. If the second write fails you get an
     /// expiry record with no ban - visible on the admin page and harmless - rather than a permanent
     /// ban with nothing recording when it should end or what state to restore.
+    ///
+    /// Any earlier row that is still open is closed in the same transaction. Such a row is left behind
+    /// when a ban is lifted outside the website (the OpenMU panel, or straight in the database), and
+    /// leaving it open would let its expiry end the NEW ban early, or let an unban restore the state
+    /// recorded back then - a GameMaster state the account may have lost since.
     /// </summary>
     public async Task<AdminActionResult> BanAsync(Guid accountId, DateTimeOffset? until, string reason, AdminContext actor, CancellationToken cancellationToken)
     {
@@ -142,7 +177,14 @@ public sealed class AdminActions(
         var newState = until is null ? GameEnums.AccountState.Banned : GameEnums.AccountState.TemporarilyBanned;
 
         await using (var site = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
+        await using (var transaction = await site.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
         {
+            await site.ExecuteAsync(new CommandDefinition(
+                "UPDATE web_ban SET lifted_at = now() WHERE account_id = @accountId AND lifted_at IS NULL",
+                new { accountId },
+                transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
             await site.ExecuteAsync(new CommandDefinition(
                 """
                 INSERT INTO web_ban (id, account_id, login_name, prior_state, reason, expires_at, actor)
@@ -158,7 +200,10 @@ public sealed class AdminActions(
                     expiresAt = until,
                     actor = actor.LoginName,
                 },
+                transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await this.SetStateAsync(accountId, newState, cancellationToken).ConfigureAwait(false);
@@ -177,6 +222,9 @@ public sealed class AdminActions(
     ///
     /// Restoring the RECORDED state rather than writing 0: a game master who was banned would
     /// otherwise come back as an ordinary player, silently losing their role.
+    ///
+    /// Every open row is closed, but only the NEWEST one decides the state: an older row that was
+    /// left open by a ban lifted elsewhere records a state from before that, possibly GameMaster.
     /// </summary>
     public async Task<AdminActionResult> UnbanAsync(Guid accountId, AdminContext actor, CancellationToken cancellationToken)
     {
@@ -194,18 +242,20 @@ public sealed class AdminActions(
         int restoreTo;
         await using (var site = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
         {
-            var prior = await site.ExecuteScalarAsync<int?>(new CommandDefinition(
+            // One statement, so closing the rows and reading them back is atomic.
+            var lifted = await site.QueryAsync<LiftedBan>(new CommandDefinition(
                 """
                 UPDATE web_ban SET lifted_at = now()
                  WHERE account_id = @accountId AND lifted_at IS NULL
-                RETURNING prior_state
+                RETURNING prior_state AS PriorState, created_at AS CreatedAt
                 """,
                 new { accountId },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             // No record means the ban was placed elsewhere - in the OpenMU panel, or straight in the
             // database. Normal is the only safe assumption then.
-            restoreTo = prior ?? GameEnums.AccountState.Normal;
+            restoreTo = lifted.OrderByDescending(ban => ban.CreatedAt).FirstOrDefault()?.PriorState
+                        ?? GameEnums.AccountState.Normal;
         }
 
         await this.SetStateAsync(accountId, restoreTo, cancellationToken).ConfigureAwait(false);
@@ -305,6 +355,10 @@ public sealed class AdminActions(
     /// An administrator may not act on another administrator; only the owner may. Nobody may act on
     /// the owner - the lever for a rogue administrator is removing them from MUSITE_ADMINS, which
     /// lives in configuration rather than in a form anybody can post to.
+    ///
+    /// The protection comes from the configuration ALONE (<see cref="RoleResolver.ResolveProtection"/>),
+    /// not from the target's current state: a banned administrator resolves to no role at all, and
+    /// must still not be unbanned - or banned again with a different expiry - by another one.
     /// </summary>
     private async Task<(AdminActionResult Result, string LoginName, int State)> ResolveTargetAsync(Guid accountId, AdminContext actor, CancellationToken cancellationToken)
     {
@@ -320,7 +374,7 @@ public sealed class AdminActions(
             return (AdminActionResult.NotFound, string.Empty, 0);
         }
 
-        var targetRole = roles.Resolve(target.LoginName, target.State);
+        var targetRole = roles.ResolveProtection(target.LoginName);
 
         if (targetRole == SiteRole.Owner)
         {
@@ -354,14 +408,7 @@ public sealed class AdminActions(
     /// </summary>
     private async Task CutOffAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        await using var site = await sources.Site.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var ids = await site.QueryAsync<Guid>(new CommandDefinition(
-            "SELECT id FROM web_session WHERE account_id = @accountId AND revoked_at IS NULL",
-            new { accountId },
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
-
-        await sessions.RevokeAllAsync(accountId, null, cancellationToken).ConfigureAwait(false);
+        var ids = await sessions.RevokeAllAsync(accountId, null, cancellationToken).ConfigureAwait(false);
 
         foreach (var id in ids)
         {
@@ -374,6 +421,8 @@ public sealed class AdminActions(
     private sealed record TargetRow(string LoginName, int State);
 
     private sealed record RegistrationCounts(int Today, int Week);
+
+    private sealed record LiftedBan(int PriorState, DateTimeOffset CreatedAt);
 }
 
 /// <summary>Who is performing an administrative action.</summary>

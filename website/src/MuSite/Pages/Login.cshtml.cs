@@ -36,7 +36,17 @@ public sealed class LoginModel(
         // "wrong password" turns this form into an account-name oracle.
         const string refused = "That account name and password do not match.";
 
-        if (loginName.Length == 0 || password.Length == 0)
+        // A name longer than the game allows can't exist, and is refused before it reaches the
+        // lockout cache or the database.
+        if (loginName.Length == 0 || password.Length == 0 || loginName.Length > GameAccount.MaxLoginNameLength)
+        {
+            this.Error = refused;
+            return this.Page();
+        }
+
+        // OpenMU's seeded accounts ship with password == login name, so they are refused whether or
+        // not they still exist. The list is public, so refusing them early tells nobody anything.
+        if (SeedAccounts.IsSeedName(loginName))
         {
             this.Error = refused;
             return this.Page();

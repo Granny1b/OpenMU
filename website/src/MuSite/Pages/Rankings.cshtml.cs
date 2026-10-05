@@ -81,7 +81,8 @@ public sealed class RankingsModel(RankingCache cache) : PageModel
         // visible instead of quietly showing a different board.
         if (!string.IsNullOrEmpty(board))
         {
-            if (!Enum.TryParse<RankingBoard>(board, ignoreCase: true, out var parsed))
+            // Enum.TryParse also accepts any number ("/rankings/7"), which is no board at all.
+            if (!Enum.TryParse<RankingBoard>(board, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
             {
                 return this.NotFound();
             }
@@ -89,8 +90,8 @@ public sealed class RankingsModel(RankingCache cache) : PageModel
             this.Board = parsed;
         }
 
-        this.PageNumber = Math.Max(1, page);
-        this.Search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        this.PageNumber = PublicQueries.ClampPage(page);
+        this.Search = PublicQueries.NormalizeSearch(q);
 
         var count = await cache.CountRankingAsync(this.Board, this.Search, cancellationToken).ConfigureAwait(false);
         this.Total = count.Value;
