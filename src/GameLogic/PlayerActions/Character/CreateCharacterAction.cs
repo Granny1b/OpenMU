@@ -97,6 +97,15 @@ public class CreateCharacterAction
             return null;
         }
 
+        // Classes with a creation flag (e.g. Magic Gladiator, Dark Lord) have to be unlocked for the account.
+        // The client only offers them when they're unlocked, but a crafted request could create them anyway.
+        if (characterClass.CreationAllowedFlag != 0
+            && account.UnlockedCharacterClasses?.Contains(characterClass) is not true)
+        {
+            player.Logger.LogWarning("Account {Account} tried to create a character of locked class {Class}.", account.LoginName, characterClass.Name);
+            return null;
+        }
+
         var character = player.PersistenceContext.CreateNew<DataModel.Entities.Character>();
         character.CharacterClass = characterClass;
         character.Name = name;

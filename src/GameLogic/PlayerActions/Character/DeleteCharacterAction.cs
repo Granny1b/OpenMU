@@ -36,7 +36,7 @@ public class DeleteCharacterAction
 
         var character = player.Account!.Characters.FirstOrDefault(c => c.Name == characterName);
 
-        if (character is null)
+        if (character is null || character == player.SelectedCharacter)
         {
             player.Logger.LogError("Character not found. Hacker maybe tried to delete other players character!" +
                                    Environment.NewLine + "\tAccName: " + player.Account.LoginName +

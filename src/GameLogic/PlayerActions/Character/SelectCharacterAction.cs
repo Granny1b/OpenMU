@@ -17,9 +17,9 @@ public class SelectCharacterAction
     public async ValueTask SelectCharacterAsync(Player player, string characterName)
     {
         using var loggerScope = player.Logger.BeginScope(this.GetType());
-        if (player.PlayerState.CurrentState != PlayerState.CharacterSelection)
+        if (player.PlayerState.CurrentState != PlayerState.CharacterSelection || player.SelectedCharacter is not null)
         {
-            player.Logger.LogError("Could not select character because of wrong current player state: {0}", player.PlayerState.CurrentState);
+            player.Logger.LogError("Could not select character because of wrong current player state: {0}, or another selected character", player.PlayerState.CurrentState);
             await player.DisconnectAsync().ConfigureAwait(false);
             return;
         }

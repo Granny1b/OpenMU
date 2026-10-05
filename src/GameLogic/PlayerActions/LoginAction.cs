@@ -1,9 +1,10 @@
-// <copyright file="LoginAction.cs" company="MUnique">
+﻿// <copyright file="LoginAction.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
 namespace MUnique.OpenMU.GameLogic.PlayerActions;
 
+using System.Runtime.CompilerServices;
 using System.Threading;
 using MUnique.OpenMU.GameLogic.Views.Login;
 
@@ -12,6 +13,16 @@ using MUnique.OpenMU.GameLogic.Views.Login;
 /// </summary>
 public class LoginAction
 {
+    /// <summary>
+    /// The maximum number of failed login attempts per connection. After that, the connection is closed.
+    /// </summary>
+    private const int MaximumFailedAttemptsPerConnection = 5;
+
+    /// <summary>
+    /// The number of failed login attempts per player (connection).
+    /// </summary>
+    private static readonly ConditionalWeakTable<Player, StrongBox<int>> FailedAttempts = new();
+
     private static int _templateCounter;
 
     /// <summary>
@@ -24,9 +35,25 @@ public class LoginAction
     {
         using var loggerScope = player.Logger.BeginScope(this.GetType());
 
+        // A login is only possible from the login screen. The in-game states can advance to the
+        // authenticated state, because that's required for the logout to the character selection.
+        // Without this check, a player could log in with another account while still being in the game.
+        if (player.PlayerState.CurrentState != PlayerState.LoginScreen || player.Account is not null)
+        {
+            player.Logger.LogWarning("Login request for [{Username}] in unexpected state {State}.", username, player.PlayerState.CurrentState);
+            return;
+        }
+
         var state = await this.AuthenticateAsync(player, username, password).ConfigureAwait(false);
         if (state is null)
         {
+            var failedAttempts = FailedAttempts.GetOrCreateValue(player);
+            if (Interlocked.Increment(ref failedAttempts.Value) >= MaximumFailedAttemptsPerConnection)
+            {
+                player.Logger.LogInformation("Disconnecting after {Count} failed login attempts.", failedAttempts.Value);
+                await player.DisconnectAsync().ConfigureAwait(false);
+            }
+
             return;
         }
 

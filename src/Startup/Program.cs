@@ -481,18 +481,26 @@ internal sealed class Program : IDisposable
     private async Task<IMigratableDatabaseContextProvider> DeterminePersistenceContextProviderAsync(string[] args, ILoggerFactory loggerFactory, IConfigurationChangeListener changeListener, IConfigurationChangePublisher changePublisher)
     {
         var version = this.GetVersionParameter(args);
+        var isDemo = args.Contains("-demo");
+
+        // The test accounts have well-known passwords (equal to the login name), and some of them are
+        // game masters. They're only created when explicitly requested, so that a server which is
+        // initialized on the internet doesn't get them.
+        var createTestAccounts = isDemo
+            || args.Contains("-testaccounts")
+            || this._configuration.GetValue<bool>("Database:CreateTestAccounts");
 
         IMigratableDatabaseContextProvider contextProvider;
-        if (args.Contains("-demo"))
+        if (isDemo)
         {
             var inMemoryProvider = new InMemoryPersistenceContextProvider();
             contextProvider = inMemoryProvider;
-            await this.InitializeDataAsync(version, loggerFactory, contextProvider).ConfigureAwait(false);
+            await this.InitializeDataAsync(version, loggerFactory, contextProvider, createTestAccounts).ConfigureAwait(false);
             inMemoryProvider.ChangePublisher = changePublisher;
         }
         else
         {
-            contextProvider = await this.PrepareRepositoryProviderAsync(args.Contains("-reinit"), version, loggerFactory, changeListener).ConfigureAwait(false);
+            contextProvider = await this.PrepareRepositoryProviderAsync(args.Contains("-reinit"), version, loggerFactory, changeListener, createTestAccounts).ConfigureAwait(false);
         }
 
         await this.ReadSystemConfigurationAsync(contextProvider).ConfigureAwait(false);
@@ -500,7 +508,7 @@ internal sealed class Program : IDisposable
         return contextProvider;
     }
 
-    private async Task<IMigratableDatabaseContextProvider> PrepareRepositoryProviderAsync(bool reinit, string version, ILoggerFactory loggerFactory, IConfigurationChangeListener changeListener)
+    private async Task<IMigratableDatabaseContextProvider> PrepareRepositoryProviderAsync(bool reinit, string version, ILoggerFactory loggerFactory, IConfigurationChangeListener changeListener, bool createTestAccounts)
     {
         var contextProvider = new PersistenceContextProvider(loggerFactory, changeListener);
         if (reinit || !await contextProvider.DatabaseExistsAsync().ConfigureAwait(false))
@@ -518,7 +526,7 @@ internal sealed class Program : IDisposable
                 ? "Building the schema on the externally-provisioned database (no drop/create)..."
                 : "The database is getting (re-)initialized...");
             using var update = await contextProvider.ReCreateDatabaseAsync(dropExistingDatabase: !assumeExternallyProvisioned).ConfigureAwait(false);
-            await this.InitializeDataAsync(version, loggerFactory, contextProvider).ConfigureAwait(false);
+            await this.InitializeDataAsync(version, loggerFactory, contextProvider, createTestAccounts).ConfigureAwait(false);
             this._logger.Information("...initialization finished.");
         }
         else if (!await contextProvider.IsDatabaseUpToDateAsync().ConfigureAwait(false))
@@ -584,7 +592,7 @@ internal sealed class Program : IDisposable
         }
     }
 
-    private async Task InitializeDataAsync(string version, ILoggerFactory loggerFactory, IPersistenceContextProvider contextProvider)
+    private async Task InitializeDataAsync(string version, ILoggerFactory loggerFactory, IPersistenceContextProvider contextProvider, bool createTestAccounts)
     {
         var serviceContainer = new ServiceContainer();
         serviceContainer.AddService(typeof(ILoggerFactory), loggerFactory);
@@ -596,6 +604,6 @@ internal sealed class Program : IDisposable
         var plugInManager = new PlugInManager(null, loggerFactory, serviceContainer, referenceHandler);
         plugInManager.DiscoverAndRegisterPlugInsOf<IDataInitializationPlugIn>();
         var initialization = plugInManager.GetStrategy<IDataInitializationPlugIn>(version) ?? throw new Exception("Data initialization plugin not found");
-        await initialization.CreateInitialDataAsync(3, true).ConfigureAwait(false);
+        await initialization.CreateInitialDataAsync(3, createTestAccounts).ConfigureAwait(false);
     }
 }
