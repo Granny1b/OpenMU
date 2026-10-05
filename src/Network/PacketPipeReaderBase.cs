@@ -147,8 +147,11 @@ public abstract class PacketPipeReaderBase
         }
         else
         {
-            // Tell the PipeReader how much of the buffer we have consumed
-            this.Source.AdvanceTo(buffer.Start);
+            // Tell the PipeReader how much of the buffer we have consumed, and that we examined
+            // everything else. Without marking the rest as examined, the next ReadAsync completes
+            // immediately with the same incomplete data, so a peer which sends a partial packet
+            // (even a single byte) makes this loop spin at full CPU.
+            this.Source.AdvanceTo(buffer.Start, buffer.End);
         }
 
         return result.IsCompleted || readingCancelledOrCompleted;
