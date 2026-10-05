@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.Web.Shared.Services;
 
 using System.IO;
 using System.Threading;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using MUnique.OpenMU.Persistence;
@@ -17,8 +18,13 @@ using MUnique.OpenMU.Persistence.Json;
 /// </summary>
 /// <typeparam name="T">The source type of the data object.</typeparam>
 /// <typeparam name="TSerializable">The type of the serializable.</typeparam>
+/// <remarks>
+/// The data may contain secrets like the password hashes of accounts, so it requires an authorized
+/// user - also in hosts which don't require an authorization for all of their controllers.
+/// </remarks>
 [Route("download/[controller]")]
 [GenericControllerName]
+[Authorize]
 public class JsonDownloadController<T, TSerializable> : ControllerBase
     where T : class
     where TSerializable : class

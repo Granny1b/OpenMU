@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.Web.AdminPanel.Pages;
 
 using System.Reflection;
 using System.Threading;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.Routing;
@@ -13,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.Persistence;
+using MUnique.OpenMU.Web.AdminPanel.Auth;
 using MUnique.OpenMU.Web.AdminPanel.Properties;
 using MUnique.OpenMU.Web.Shared;
 using MUnique.OpenMU.Web.Shared.Components;
@@ -26,6 +28,7 @@ using MUnique.OpenMU.Web.Shared.Services;
 /// </summary>
 [Route("/map-editor")]
 [Route("/map-editor/{SelectedMapId:guid}")]
+[Authorize(Policy = AdminPolicies.Administrator)]
 public sealed class EditMap : ComponentBase, IDisposable
 {
     private List<GameMapDefinition>? _maps;

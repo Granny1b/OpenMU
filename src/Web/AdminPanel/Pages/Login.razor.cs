@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.Web.AdminPanel.Pages;
 
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -85,6 +86,33 @@ public partial class Login : IAsyncDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Determines whether the specified url is a path within this application.
+    /// </summary>
+    /// <param name="url">The url.</param>
+    /// <returns><c>true</c>, if the url is a path within this application; otherwise, <c>false</c>.</returns>
+    /// <remarks>
+    /// Only a single leading slash is allowed: anything else could be an absolute url (<c>https://evil</c>),
+    /// a protocol relative one (<c>//evil</c>, <c>/\evil</c>) or a script (<c>javascript:...</c>), which would
+    /// send the user to a foreign site, or run code in the panel, right after the login.
+    /// Browsers ignore control characters like tabs and line breaks in urls and treat backslashes like
+    /// slashes, so these are refused as well.
+    /// </remarks>
+    internal static bool IsLocalUrl([NotNullWhen(true)] string? url)
+    {
+        if (string.IsNullOrEmpty(url) || url[0] != '/')
+        {
+            return false;
+        }
+
+        if (url.Length > 1 && (url[1] == '/' || url[1] == '\\'))
+        {
+            return false;
+        }
+
+        return !url.Any(c => c == '\\' || char.IsControl(c) || char.IsWhiteSpace(c));
     }
 
     /// <inheritdoc />
@@ -206,20 +234,7 @@ public partial class Login : IAsyncDisposable
     /// </summary>
     private string GetSafeReturnUrl()
     {
-        if (string.IsNullOrWhiteSpace(this.ReturnUrl))
-        {
-            return string.Empty;
-        }
-
-        // An absolute or protocol relative url could send the user to a foreign site after login.
-        if (this.ReturnUrl.StartsWith('/')
-            || this.ReturnUrl.StartsWith('\\')
-            || this.ReturnUrl.Contains("://", StringComparison.Ordinal))
-        {
-            return string.Empty;
-        }
-
-        return this.ReturnUrl;
+        return IsLocalUrl(this.ReturnUrl) ? this.ReturnUrl! : "/";
     }
 
     private void ToggleRecoveryCode()

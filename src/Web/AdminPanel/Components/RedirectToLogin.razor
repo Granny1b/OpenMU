@@ -5,9 +5,10 @@
     protected override void OnInitialized()
     {
         var returnUrl = this.NavigationManager.ToBaseRelativePath(this.NavigationManager.Uri);
+        // The login page only accepts a path with a single leading slash as return url.
         var target = string.IsNullOrEmpty(returnUrl) || returnUrl.StartsWith("login", StringComparison.OrdinalIgnoreCase)
             ? "login"
-            : $"login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+            : $"login?returnUrl={Uri.EscapeDataString("/" + returnUrl)}";
         this.NavigationManager.NavigateTo(target, replace: true);
     }
 }

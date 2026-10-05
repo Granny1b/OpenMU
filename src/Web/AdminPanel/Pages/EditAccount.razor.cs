@@ -5,10 +5,12 @@
 namespace MUnique.OpenMU.Web.AdminPanel.Pages;
 
 using System.Threading;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using MUnique.OpenMU.DataModel.Entities;
 using MUnique.OpenMU.Persistence;
+using MUnique.OpenMU.Web.AdminPanel.Auth;
 using MUnique.OpenMU.Web.AdminPanel.Properties;
 using MUnique.OpenMU.Web.Shared.Components.Form;
 using MUnique.OpenMU.Web.Shared.Components.ItemEdit;
@@ -17,6 +19,7 @@ using MUnique.OpenMU.Web.Shared.Components.ItemEdit;
 /// The edit page for account data.
 /// </summary>
 [Route("/edit-account/{accountId:guid}/{typeString}/{id:guid}")]
+[Authorize(Policy = AdminPolicies.Operator)]
 public partial class EditAccount : EditBase
 {
     /// <summary>

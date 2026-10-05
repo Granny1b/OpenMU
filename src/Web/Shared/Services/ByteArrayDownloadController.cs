@@ -5,13 +5,19 @@
 namespace MUnique.OpenMU.Web.Shared.Services;
 
 using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MUnique.OpenMU.Persistence;
 
 /// <summary>
 /// API-Controller which returns data of a byte array of an object.
 /// </summary>
+/// <remarks>
+/// It can read any persisted object, so it requires an authorized user - also in hosts which
+/// don't require an authorization for all of their controllers.
+/// </remarks>
 [Route("download/{typeString}/{id:guid}/{propertyName}")]
+[Authorize]
 public class ByteArrayDownloadController : Controller
 {
     private readonly IPersistenceContextProvider _persistenceContextProvider;

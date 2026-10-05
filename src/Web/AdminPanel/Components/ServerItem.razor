@@ -43,6 +43,8 @@
     </td>
     <td>@this.Server.ServerState.GetEnumCaption()</td>
     <td>
+      @* Only operators may start and stop servers, and only administrators may remove them. *@
+      <AuthorizeView Policy="@AdminPolicies.Operator">
       <div class="btn-group" role="group" aria-label="@Resources.ServerControl">
       @if (this.Server.ServerState == ServerState.Started)
       {
@@ -69,9 +71,18 @@
         </button>
         @if (this.Server.Type is ServerType.GameServer or ServerType.ConnectServer)
         {
-          <button type="button" class="btn btn-danger btn-sm" title="@Resources.Remove" @onclick="this.OnDeleteServerClickAsync">
-            <span class="oi oi-trash"></span>
-          </button>
+          <AuthorizeView Policy="@AdminPolicies.Administrator" Context="administratorContext">
+            <Authorized>
+              <button type="button" class="btn btn-danger btn-sm" title="@Resources.Remove" @onclick="this.OnDeleteServerClickAsync">
+                <span class="oi oi-trash"></span>
+              </button>
+            </Authorized>
+            <NotAuthorized>
+              <button type="button" class="btn btn-secondary btn-sm" title="@Resources.Remove" disabled>
+                <span class="oi oi-trash"></span>
+              </button>
+            </NotAuthorized>
+          </AuthorizeView>
         }
       }
       else
@@ -90,6 +101,7 @@
         }
       }
       </div>
+      </AuthorizeView>
 
     </td>
 </tr>

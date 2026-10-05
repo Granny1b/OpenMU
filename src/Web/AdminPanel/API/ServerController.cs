@@ -42,13 +42,24 @@ namespace MUnique.OpenMU.Web.AdminPanel.API
         /// <remarks>
         /// This is the only endpoint of the API which does something instead of reporting
         /// something, so it requires the operator role and not just the viewer role.
+        /// It only accepts POST: a GET could be triggered cross-site, e.g. by an image tag on
+        /// another page, while the browser sends along the authentication cookie of the panel.
         /// </remarks>
-        [Route("send/{id=0}")]
+        [HttpPost("send/{id=0}")]
         [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.ApiSchemes, Policy = AdminPolicies.Operator)]
-        public async Task<IActionResult> SendGlobalMessageAsync(int id, [FromQuery(Name = "msg")] string msg)
+        public async Task<IActionResult> SendGlobalMessageAsync(int id, [FromQuery(Name = "msg")] string? msg)
         {
-            var server = (GameServer)this._gameServers.Values.ElementAt(id);
-            if (server is not null)
+            if (string.IsNullOrWhiteSpace(msg))
+            {
+                return this.BadRequest("No message");
+            }
+
+            if (id < 0 || id >= this._gameServers.Count)
+            {
+                return this.NotFound("Server not found");
+            }
+
+            if (this._gameServers.Values.ElementAt(id) is GameServer server)
             {
                 await server.Context.SendGlobalNotificationAsync(msg).ConfigureAwait(false);
                 return this.Ok("Done");

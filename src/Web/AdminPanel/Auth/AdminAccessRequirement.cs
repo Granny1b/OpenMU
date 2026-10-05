@@ -19,6 +19,9 @@ public record AdminAccessRequirement(string? RequiredRole = null) : IAuthorizati
 /// As long as no user exists at all, the panel has to stay reachable: it's the tool which creates
 /// the database and therefore the first user. That initial setup mode ends as soon as the first
 /// user exists, or immediately when a bootstrap user is configured.
+/// It's only entered when the user storage confirmed that there is no user - when the storage is
+/// unavailable, <see cref="AdminUserAvailabilityService"/> reports that users exist, so access
+/// fails closed.
 /// </remarks>
 public class AdminAccessRequirementHandler : AuthorizationHandler<AdminAccessRequirement>
 {

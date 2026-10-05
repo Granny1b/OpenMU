@@ -66,7 +66,7 @@ public static class AdminPanelAuthExtensions
         services.AddSingleton(ConfigureDataProtection(services, configuration));
 
         // The hosting application registers the real storage; this is just a fallback which lets
-        // the panel start in its initial setup mode instead of failing to resolve its services.
+        // the panel start (locked, except for a bootstrap user) instead of failing to resolve its services.
         services.TryAddSingleton<IAdminUserRepository, UnavailableAdminUserRepository>();
         services.TryAddSingleton<IApiKeyRepository, UnavailableApiKeyRepository>();
 
@@ -97,12 +97,18 @@ public static class AdminPanelAuthExtensions
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
+                // The panel is usually run behind a reverse proxy which terminates TLS, so the
+                // request which reaches the panel is plain http. The cookie is still marked as
+                // secure when the proxy says that the browser used https. Plain http is still
+                // possible, e.g. for http://localhost during development or through an SSH tunnel.
+                options.Cookie = new ForwardedHttpsCookieBuilder
+                {
+                    SecurePolicy = CookieSecurePolicy.SameAsRequest,
+                    IsEssential = true,
+                };
                 options.Cookie.Name = AdminAuthenticationDefaults.CookieName;
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Lax;
-
-                // The panel is usually run behind a reverse proxy which terminates TLS.
-                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
                 options.ExpireTimeSpan = authOptions.SessionTimeout;
                 options.SlidingExpiration = true;
                 options.LoginPath = AdminAuthenticationDefaults.LoginPath;
@@ -157,16 +163,17 @@ public static class AdminPanelAuthExtensions
     }
 
     /// <summary>
-    /// Requires the default authorization policy for all requests below the specified path.
+    /// Requires an authorization policy for all requests below the specified path.
     /// </summary>
     /// <param name="app">The application builder.</param>
     /// <param name="path">The path, e.g. <c>/logs</c>.</param>
+    /// <param name="policyName">The name of the required policy; <c>null</c> for the default policy.</param>
     /// <returns>The same instance, to allow chaining of further calls.</returns>
     /// <remarks>
     /// Static files are served by a middleware and not by an endpoint, so they are not covered by
     /// the authorization of the endpoint routing. The log files must not be readable by anyone.
     /// </remarks>
-    public static IApplicationBuilder UseAuthorizedPath(this IApplicationBuilder app, string path)
+    public static IApplicationBuilder UseAuthorizedPath(this IApplicationBuilder app, string path, string? policyName = null)
     {
         return app.Use(async (context, next) =>
         {
@@ -178,11 +185,22 @@ public static class AdminPanelAuthExtensions
 
             var policyProvider = context.RequestServices.GetRequiredService<IAuthorizationPolicyProvider>();
             var authorizationService = context.RequestServices.GetRequiredService<IAuthorizationService>();
-            var policy = await policyProvider.GetDefaultPolicyAsync().ConfigureAwait(false);
+            var policy = policyName is null
+                ? await policyProvider.GetDefaultPolicyAsync().ConfigureAwait(false)
+                : await policyProvider.GetPolicyAsync(policyName).ConfigureAwait(false)
+                  ?? throw new InvalidOperationException($"The authorization policy '{policyName}' is not defined.");
             var result = await authorizationService.AuthorizeAsync(context.User, null, policy).ConfigureAwait(false);
             if (!result.Succeeded)
             {
-                await context.ChallengeAsync().ConfigureAwait(false);
+                if (context.User.Identity?.IsAuthenticated is true)
+                {
+                    await context.ForbidAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    await context.ChallengeAsync().ConfigureAwait(false);
+                }
+
                 return;
             }
 

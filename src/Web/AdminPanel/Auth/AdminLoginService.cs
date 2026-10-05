@@ -4,7 +4,10 @@
 
 namespace MUnique.OpenMU.Web.AdminPanel.Auth;
 
+using System.Buffers.Binary;
+using System.Globalization;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using MUnique.OpenMU.Persistence.AdminAuth;
@@ -54,6 +57,11 @@ public record AdminLoginResult(AdminLoginStatus Status, string? Ticket = null, I
 public class AdminLoginService
 {
     private const int TotpTimeStepSeconds = 30;
+
+    /// <summary>
+    /// The number of time steps before and after the current one, in which the step of a code is searched.
+    /// </summary>
+    private const int TotpStepTolerance = 3;
 
     private readonly UserManager<AdminUser> _userManager;
     private readonly SignInTicketService _ticketService;
@@ -151,7 +159,7 @@ public class AdminLoginService
             isValid = await this._userManager
                 .VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, normalizedCode)
                 .ConfigureAwait(false)
-                && await this.TryConsumeTimeStepAsync(user).ConfigureAwait(false);
+                && await this.TryConsumeTimeStepAsync(user, normalizedCode).ConfigureAwait(false);
         }
 
         if (!isValid)
@@ -212,6 +220,92 @@ public class AdminLoginService
         return claims;
     }
 
+    /// <summary>
+    /// Finds the latest time step around the current time, for which the specified code is valid.
+    /// </summary>
+    /// <param name="base32Key">The base32 encoded authenticator key.</param>
+    /// <param name="code">The code.</param>
+    /// <returns>The time step, or <c>null</c>, if the code doesn't match any time step of the window.</returns>
+    /// <remarks>
+    /// The window is one step wider than the one of the token provider (two steps in each direction),
+    /// so that a code which it accepted is still found when the time step changed in between.
+    /// </remarks>
+    private static long? FindMatchingTimeStep(string? base32Key, string code)
+    {
+        if (string.IsNullOrEmpty(base32Key)
+            || !int.TryParse(code, NumberStyles.None, CultureInfo.InvariantCulture, out var expectedCode)
+            || !TryDecodeBase32(base32Key, out var key))
+        {
+            return null;
+        }
+
+        var currentStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / TotpTimeStepSeconds;
+        for (var step = currentStep + TotpStepTolerance; step >= currentStep - TotpStepTolerance; step--)
+        {
+            if (ComputeTotp(key, step) == expectedCode)
+            {
+                return step;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Computes the time based one time password of RFC 6238 for the specified time step,
+    /// the same way as the token provider of ASP.NET Core Identity does.
+    /// </summary>
+    /// <param name="key">The key.</param>
+    /// <param name="timeStep">The time step.</param>
+    /// <returns>The six digit code, as number.</returns>
+    private static int ComputeTotp(byte[] key, long timeStep)
+    {
+        Span<byte> counter = stackalloc byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64BigEndian(counter, timeStep);
+        Span<byte> hash = stackalloc byte[HMACSHA1.HashSizeInBytes];
+        HMACSHA1.HashData(key, counter, hash);
+
+        var offset = hash[^1] & 0x0F;
+        var binaryCode = ((hash[offset] & 0x7F) << 24)
+                         | (hash[offset + 1] << 16)
+                         | (hash[offset + 2] << 8)
+                         | hash[offset + 3];
+        return binaryCode % 1_000_000;
+    }
+
+    private static bool TryDecodeBase32(string input, out byte[] result)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var bytes = new List<byte>(input.Length * 5 / 8);
+        var buffer = 0;
+        var bitCount = 0;
+        foreach (var character in input.TrimEnd('='))
+        {
+            if (character == ' ')
+            {
+                continue;
+            }
+
+            var index = alphabet.IndexOf(char.ToUpperInvariant(character), StringComparison.Ordinal);
+            if (index < 0)
+            {
+                result = Array.Empty<byte>();
+                return false;
+            }
+
+            buffer = (buffer << 5) | index;
+            bitCount += 5;
+            if (bitCount >= 8)
+            {
+                bitCount -= 8;
+                bytes.Add((byte)((buffer >> bitCount) & 0xFF));
+            }
+        }
+
+        result = bytes.ToArray();
+        return true;
+    }
+
     private async Task<AdminLoginResult> GetFailedResultAsync(AdminUser user)
     {
         return await this._userManager.IsLockedOutAsync(user).ConfigureAwait(false)
@@ -238,24 +332,37 @@ public class AdminLoginService
     /// <summary>
     /// Makes sure that an observed authenticator code can't be used a second time within its validation window.
     /// </summary>
+    /// <param name="user">The user.</param>
+    /// <param name="code">The code, which has already been verified by the token provider.</param>
+    /// <returns><c>true</c>, if no code of the same or a later time step was accepted before; otherwise, <c>false</c>.</returns>
     /// <remarks>
     /// The token provider of ASP.NET Core Identity accepts a code of the current and of the adjacent
     /// time steps, but it doesn't tell which step matched and it doesn't remember used codes.
-    /// Remembering the time step of the last successful validation at least prevents that the same
-    /// code is accepted twice within the same time step.
+    /// So the time step which the code belongs to is determined here, and only codes of a later time
+    /// step than the last accepted one are accepted. Remembering the current time step instead would
+    /// allow to replay a code of an earlier step as long as it's within the validation window.
     /// </remarks>
-    private async Task<bool> TryConsumeTimeStepAsync(AdminUser user)
+    private async Task<bool> TryConsumeTimeStepAsync(AdminUser user, string code)
     {
-        var currentStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / TotpTimeStepSeconds;
-        if (currentStep <= user.LastAcceptedTotpStep)
+        var key = await this._userManager.GetAuthenticatorKeyAsync(user).ConfigureAwait(false);
+        var matchedStep = FindMatchingTimeStep(key, code);
+        if (matchedStep is null)
         {
             this._logger.LogWarning(
-                "Rejected an authenticator code of admin panel user '{LoginName}', because a code of the same time step was already used.",
+                "Rejected an authenticator code of admin panel user '{LoginName}', because its time step could not be determined.",
                 user.LoginName);
             return false;
         }
 
-        user.LastAcceptedTotpStep = currentStep;
+        if (matchedStep.Value <= user.LastAcceptedTotpStep)
+        {
+            this._logger.LogWarning(
+                "Rejected an authenticator code of admin panel user '{LoginName}', because a code of the same or a later time step was already used.",
+                user.LoginName);
+            return false;
+        }
+
+        user.LastAcceptedTotpStep = matchedStep.Value;
         await this._userManager.UpdateAsync(user).ConfigureAwait(false);
         return true;
     }

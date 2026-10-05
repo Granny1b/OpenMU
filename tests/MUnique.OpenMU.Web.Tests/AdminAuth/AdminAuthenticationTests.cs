@@ -199,6 +199,50 @@ public class AdminAuthenticationTests
     }
 
     /// <summary>
+    /// Tests that an authenticator code can't be replayed in a later time step, as long as it's
+    /// still within the validation window of the token provider.
+    /// </summary>
+    /// <remarks>
+    /// The time step of the last accepted code is set up as if the code of the previous time step
+    /// had been used during that step. Remembering the current time step instead of the matched
+    /// one would accept that code a second time now.
+    /// </remarks>
+    [Test]
+    public async Task AuthenticatorCodeOfAnEarlierStepCanNotBeReplayedAsync()
+    {
+        var (user, key) = await this.CreateUserWithAuthenticatorAsync("tester").ConfigureAwait(false);
+        var previousStepCode = TestTotpGenerator.Generate(key, -1);
+        var previousStep = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30) - 1;
+        await this.SetLastAcceptedTotpStepAsync(user, previousStep).ConfigureAwait(false);
+
+        var loginService = this.GetLoginService();
+        await loginService.CheckPasswordAsync("tester", TestPassword, false).ConfigureAwait(false);
+        var result = await loginService.CheckTwoFactorAsync(previousStepCode, false).ConfigureAwait(false);
+
+        Assert.That(result.Status, Is.EqualTo(AdminLoginStatus.Failed));
+    }
+
+    /// <summary>
+    /// Tests that an authenticator code of a later time step than the last accepted one is accepted,
+    /// and that its own time step is remembered.
+    /// </summary>
+    [Test]
+    public async Task AuthenticatorCodeOfALaterStepIsAcceptedAsync()
+    {
+        var (user, key) = await this.CreateUserWithAuthenticatorAsync("tester").ConfigureAwait(false);
+        var currentStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        await this.SetLastAcceptedTotpStepAsync(user, currentStep - 2).ConfigureAwait(false);
+
+        var loginService = this.GetLoginService();
+        await loginService.CheckPasswordAsync("tester", TestPassword, false).ConfigureAwait(false);
+        var result = await loginService.CheckTwoFactorAsync(TestTotpGenerator.Generate(key, 1), false).ConfigureAwait(false);
+
+        Assert.That(result.Status, Is.EqualTo(AdminLoginStatus.Succeeded));
+        var storedUser = await this._repository.GetByIdAsync(user.Id).ConfigureAwait(false);
+        Assert.That(storedUser!.LastAcceptedTotpStep, Is.GreaterThan(currentStep));
+    }
+
+    /// <summary>
     /// Tests that a recovery code works exactly once.
     /// </summary>
     [Test]
@@ -293,7 +337,8 @@ public class AdminAuthenticationTests
     }
 
     /// <summary>
-    /// Tests that an unreachable storage is not asked again on every authorization check.
+    /// Tests that an unreachable storage is not asked again on every authorization check,
+    /// and that the panel stays closed while it's unreachable.
     /// </summary>
     /// <remarks>
     /// The authorization of every request asks whether a user exists. When that answer required a
@@ -310,7 +355,9 @@ public class AdminAuthenticationTests
 
         for (var i = 0; i < 20; i++)
         {
-            Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.False);
+            // An unreachable storage can't confirm that no user exists, so the initial setup mode
+            // must not be entered - otherwise a database outage opens the panel to everybody.
+            Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True);
         }
 
         Assert.That(repository.EnsureStorageCallCount, Is.EqualTo(1));
@@ -394,10 +441,85 @@ public class AdminAuthenticationTests
 
         var concurrentCall = service.AnyUserExistsAsync();
         Assert.That(concurrentCall.IsCompleted, Is.True, "A check must not wait for a probe which is already running.");
-        Assert.That(await concurrentCall.ConfigureAwait(false), Is.False);
+        Assert.That(await concurrentCall.ConfigureAwait(false), Is.True, "While the answer is unknown, the panel must stay closed.");
 
         repository.Release();
-        Assert.That(await blockedCall.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false), Is.False);
+        Assert.That(await blockedCall.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false), Is.True, "An unavailable storage must not open the panel.");
+    }
+
+    /// <summary>
+    /// Tests that the initial setup mode is entered when the storage is available and confirms that no user exists.
+    /// </summary>
+    [Test]
+    public async Task ConfirmedEmptyStorageAllowsTheInitialSetupAsync()
+    {
+        var service = new AdminUserAvailabilityService(
+            this._repository,
+            this._serviceProvider.GetRequiredService<BootstrapAdminUserProvider>());
+
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.False);
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.False);
+    }
+
+    /// <summary>
+    /// Tests that a storage which fails to count the users doesn't open the panel.
+    /// </summary>
+    [Test]
+    public async Task FailingUserCountKeepsThePanelClosedAsync()
+    {
+        var repository = new GatedAdminUserRepository { ThrowOnCount = true };
+        var service = new AdminUserAvailabilityService(
+            repository,
+            this._serviceProvider.GetRequiredService<BootstrapAdminUserProvider>());
+
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True);
+    }
+
+    /// <summary>
+    /// Tests that an invalidation doesn't make the service report that no user exists while it's counting again.
+    /// </summary>
+    /// <remarks>
+    /// The invalidation used to reset the answer to "no user", so every request which arrived while the
+    /// recount was running was let in without a login.
+    /// </remarks>
+    [Test]
+    public async Task InvalidationDoesNotOpenThePanelWhileCountingAsync()
+    {
+        var repository = new GatedAdminUserRepository();
+        var service = new AdminUserAvailabilityService(
+            repository,
+            this._serviceProvider.GetRequiredService<BootstrapAdminUserProvider>());
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.False);
+
+        // The first user gets created; the recount which follows the invalidation is held up.
+        repository.UserCount = 1;
+        repository.BlockNextProbe();
+        service.Invalidate();
+        var recount = Task.Run(async () => await service.AnyUserExistsAsync().ConfigureAwait(false));
+        await repository.ProbeStarted.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True, "A pending recount must not report that no user exists.");
+
+        repository.Release();
+        Assert.That(await recount.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false), Is.True);
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True);
+    }
+
+    /// <summary>
+    /// Tests that an existing user is still known after an invalidation, e.g. after another user was deleted.
+    /// </summary>
+    [Test]
+    public async Task InvalidationKeepsAKnownUserAsync()
+    {
+        await this.CreateUserAsync("tester").ConfigureAwait(false);
+        var service = new AdminUserAvailabilityService(
+            this._repository,
+            this._serviceProvider.GetRequiredService<BootstrapAdminUserProvider>());
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True);
+
+        service.Invalidate();
+
+        Assert.That(await service.AnyUserExistsAsync().ConfigureAwait(false), Is.True);
     }
 
     /// <summary>
@@ -462,6 +584,17 @@ public class AdminAuthenticationTests
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
         services.AddAdminPanelAuth(configuration);
         return services.BuildServiceProvider();
+    }
+
+    private async Task SetLastAcceptedTotpStepAsync(AdminUser user, long step)
+    {
+        using var scope = this._serviceProvider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AdminUser>>();
+        var storedUser = await userManager.FindByIdAsync(user.Id.ToString()).ConfigureAwait(false);
+        Assert.That(storedUser, Is.Not.Null);
+        storedUser!.LastAcceptedTotpStep = step;
+        var result = await userManager.UpdateAsync(storedUser).ConfigureAwait(false);
+        Assert.That(result.Succeeded, Is.True);
     }
 
     private AdminLoginService GetLoginService()

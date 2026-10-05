@@ -13,8 +13,9 @@ using MUnique.OpenMU.Persistence.AdminAuth;
 /// register a real one, for example when the admin panel is started without a persistence provider.
 /// </summary>
 /// <remarks>
-/// It behaves like an empty storage, so the panel starts in its initial setup mode instead of
-/// failing to resolve its services. Only the configured bootstrap user can log in then.
+/// It behaves like an unavailable storage, so the panel starts instead of failing to resolve its
+/// services. Since it can't confirm that no user exists, the panel doesn't enter its unprotected
+/// initial setup mode: only the configured bootstrap user can log in then.
 /// </remarks>
 public class UnavailableAdminUserRepository : IAdminUserRepository
 {
