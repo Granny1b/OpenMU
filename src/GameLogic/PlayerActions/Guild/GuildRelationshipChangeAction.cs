@@ -1,4 +1,4 @@
-// <copyright file="GuildRelationshipChangeAction.cs" company="MUnique">
+﻿// <copyright file="GuildRelationshipChangeAction.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -39,8 +39,12 @@ public class GuildRelationshipChangeAction
             return;
         }
 
-        if (targetGuildStatus.Position != GuildPosition.GuildMaster)
+        if (targetGuildStatus.Position != GuildPosition.GuildMaster
+            || targetPlayer == player
+            || targetGuildStatus.GuildId == sourceGuildId)
         {
+            // A relationship with the own guild is not possible. Otherwise, a guild could form an
+            // alliance with itself and become an alliance master without the consent of anyone.
             await player.InvokeViewPlugInAsync<IGuildRelationshipChangeResultPlugIn>(p => p.ShowResultAsync(relationshipType, requestType, GuildRelationshipChangeResultType.Failed, targetPlayerId)).ConfigureAwait(false);
             return;
         }
@@ -131,6 +135,15 @@ public class GuildRelationshipChangeAction
             }
 
             targetGuildId = await serverContext.GuildServer.GetGuildIdByNameAsync(targetGuildName!).ConfigureAwait(false);
+
+            // The alliance master can only remove guilds of its own alliance. Otherwise, it could
+            // dissolve any other alliance, or remove guilds from them.
+            var allianceGuilds = await serverContext.GuildServer.GetAllianceGuildsAsync(sourceGuildId).ConfigureAwait(false);
+            if (targetGuildId == sourceGuildId || allianceGuilds.All(guild => guild.Id != targetGuildId))
+            {
+                await player.InvokeViewPlugInAsync<IGuildRelationshipChangeResultPlugIn>(p => p.ShowResultAsync(GuildRelationshipType.Alliance, GuildRelationshipRequestType.Leave, GuildRelationshipChangeResultType.NoAuthorization, null)).ConfigureAwait(false);
+                return;
+            }
         }
 
         var removeSuccess = await serverContext.GuildServer.RemoveAllianceAsync(targetGuildId).ConfigureAwait(false);

@@ -12,6 +12,16 @@ using MUnique.OpenMU.GameLogic.Views.Guild;
 public class GuildCreateAction
 {
     /// <summary>
+    /// The minimum level to create a guild, like checked by the guild master NPC.
+    /// </summary>
+    private const int MinimumLevel = 100;
+
+    /// <summary>
+    /// The maximum length of a guild name in bytes.
+    /// </summary>
+    private const int MaximumGuildNameBytes = 8;
+
+    /// <summary>
     /// Creates the guild.
     /// </summary>
     /// <param name="creator">The creator.</param>
@@ -23,6 +33,20 @@ public class GuildCreateAction
         if (creator.PlayerState.CurrentState != PlayerState.EnteredWorld)
         {
             creator.Logger.LogError($"Account {creator.Account?.LoginName} not in the right state, but {creator.PlayerState.CurrentState}.");
+            return;
+        }
+
+        // These requirements are checked when talking to the guild master NPC, but the creation request
+        // can be sent without that dialog.
+        if (creator.Level < MinimumLevel || creator.GuildStatus is not null)
+        {
+            creator.Logger.LogWarning("Probably Hacker - {Creator} tried to create a guild without fulfilling the requirements.", creator);
+            return;
+        }
+
+        if (!IsValidGuildName(guildName))
+        {
+            await creator.InvokeViewPlugInAsync<IShowGuildCreateResultPlugIn>(p => p.ShowGuildCreateResultAsync(GuildCreateErrorDetail.GuildAlreadyExist)).ConfigureAwait(false);
             return;
         }
 
@@ -48,5 +72,17 @@ public class GuildCreateAction
         {
             await creator.InvokeViewPlugInAsync<IShowGuildCreateResultPlugIn>(p => p.ShowGuildCreateResultAsync(GuildCreateErrorDetail.GuildAlreadyExist)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Determines whether the guild name is valid: it must not be empty, must fit into the 8 bytes of
+    /// the guild name fields of the packets, and must not contain control or replacement characters.
+    /// </summary>
+    private static bool IsValidGuildName(string guildName)
+    {
+        return !string.IsNullOrWhiteSpace(guildName)
+               && guildName.Trim() == guildName
+               && Encoding.UTF8.GetByteCount(guildName) <= MaximumGuildNameBytes
+               && !guildName.Any(c => char.IsControl(c) || c == '?' || c == '\uFFFD');
     }
 }

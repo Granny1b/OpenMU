@@ -118,6 +118,7 @@ public class GuildActionTest : GuildTestBase
     [Test]
     public async ValueTask GuildCreateAsync()
     {
+        this._player.Attributes![Stats.Level] = 100;
         var action = new GuildCreateAction();
         await action.CreateGuildAsync(this._player, "Foobar2", []).ConfigureAwait(false);
         Assert.That(this._player.GuildStatus, Is.Not.Null);
@@ -125,6 +126,17 @@ public class GuildActionTest : GuildTestBase
         var context = this.PersistenceContextProvider.CreateNewGuildContext();
         var newGuild = (await context.GetAsync<DataModel.Entities.Guild>().ConfigureAwait(false)).First(g => g.Name == "Foobar2");
         Assert.That(newGuild.Members.Any(m => m.Id == this._player.SelectedCharacter!.Id), Is.True);
+    }
+
+    /// <summary>
+    /// Tests that a guild can't be created by a player below the minimum level, even without the guild master dialog.
+    /// </summary>
+    [Test]
+    public async ValueTask GuildCreateRequiresMinimumLevelAsync()
+    {
+        var action = new GuildCreateAction();
+        await action.CreateGuildAsync(this._player, "Foobar3", []).ConfigureAwait(false);
+        Assert.That(this._player.GuildStatus, Is.Null);
     }
 
     /// <summary>

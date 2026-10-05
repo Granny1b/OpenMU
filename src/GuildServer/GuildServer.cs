@@ -291,6 +291,12 @@ public class GuildServer : IGuildServer
     /// <inheritdoc />
     public async ValueTask<AllianceCreationResult> CreateAllianceAsync(uint masterGuildId, uint targetGuildId)
     {
+        if (masterGuildId == targetGuildId)
+        {
+            // A guild can't form an alliance with itself.
+            return AllianceCreationResult.TargetGuildNotFound;
+        }
+
         if (!this._guildDictionary.TryGetValue(masterGuildId, out var masterContainer))
         {
             return AllianceCreationResult.MasterGuildNotFound;

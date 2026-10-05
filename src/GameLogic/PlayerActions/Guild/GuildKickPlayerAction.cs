@@ -44,7 +44,7 @@ public class GuildKickPlayerAction
         if (player.Account!.SecurityCode != null && player.Account.SecurityCode != securityCode)
         {
             await player.ShowLocalizedBlueMessageAsync(nameof(PlayerMessage.WrongSecurityCode)).ConfigureAwait(false);
-            player.Logger.LogDebug("Wrong Security Code: [{0}] <> [{1}], Player: {2}", securityCode, player.Account.SecurityCode, player.SelectedCharacter?.Name);
+            player.Logger.LogDebug("Wrong Security Code, Player: {0}", player.SelectedCharacter?.Name);
 
             await player.InvokeViewPlugInAsync<IGuildKickResultPlugIn>(p => p.GuildKickResultAsync(GuildKickSuccess.Failed)).ConfigureAwait(false);
             return;

@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.FriendServer;
 
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using MUnique.OpenMU.Interfaces;
@@ -49,6 +50,13 @@ public class FriendServer : IFriendServer
     /// Gets the online friends dictionary. The key is the name of the character of the corresponding OnlineFriend object.
     /// </summary>
     protected IDictionary<string, OnlineFriend> OnlineFriends { get; }
+
+    /// <summary>
+    /// Gets the names of the characters which were registered to a chat room through this server, by room id.
+    /// Only these characters may invite others to the room. Room ids are reused by the chat server, so
+    /// the members are replaced when a room with the same id is created again.
+    /// </summary>
+    private ConcurrentDictionary<ushort, ConcurrentDictionary<string, byte>> ChatRoomMembers { get; } = new();
 
     /// <inheritdoc/>
     public ValueTask ForwardLetterAsync(LetterHeader letter)
@@ -164,6 +172,11 @@ public class FriendServer : IFriendServer
         //       to create the chat room to an pub/sub-system. An available chat server could then
         //       process the request and notify the corresponding game servers.
         var roomId = await this._chatServer.CreateChatRoomAsync().ConfigureAwait(false);
+        var members = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        members.TryAdd(playerName, 0);
+        members.TryAdd(friendName, 0);
+        this.ChatRoomMembers[roomId] = members;
+
         if (await this._chatServer.RegisterClientAsync(roomId, playerName).ConfigureAwait(false) is { } authenticationInfoPlayer)
         {
             await this._friendNotifier.ChatRoomCreatedAsync(player.ServerId, authenticationInfoPlayer, friendName).ConfigureAwait(false);
@@ -198,9 +211,18 @@ public class FriendServer : IFriendServer
             return false;
         }
 
+        // Only members of the room can invite others to it. Otherwise, a player could invite a friend
+        // (e.g. an own second character) to the private chat room of anyone else and read along.
+        if (!this.ChatRoomMembers.TryGetValue(roomId, out var members) || !members.ContainsKey(playerName))
+        {
+            this._logger.LogWarning("{PlayerName} tried to invite {FriendName} to chat room {RoomId}, which it's not a member of.", playerName, friendName, roomId);
+            return false;
+        }
+
         var authenticationInfoFriend = await this._chatServer.RegisterClientAsync(roomId, friendName).ConfigureAwait(false);
         if (authenticationInfoFriend is not null)
         {
+            members.TryAdd(friendName, 0);
             await this._friendNotifier.ChatRoomCreatedAsync(friend.ServerId, authenticationInfoFriend, playerName).ConfigureAwait(false);
             return true;
         }
