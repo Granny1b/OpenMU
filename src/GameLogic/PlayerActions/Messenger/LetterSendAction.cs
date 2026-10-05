@@ -15,6 +15,11 @@ using MUnique.OpenMU.Persistence;
 public class LetterSendAction
 {
     /// <summary>
+    /// The maximum length of a letter message in bytes.
+    /// </summary>
+    private const int MaximumMessageBytes = 1000;
+
+    /// <summary>
     /// Sends the letter.
     /// </summary>
     /// <param name="player">The player.</param>
@@ -27,6 +32,15 @@ public class LetterSendAction
     public async ValueTask SendLetterAsync(Player player, string receiver, string message, string title, byte rotation, byte animation, uint letterId)
     {
         using var loggerScope = player.Logger.BeginScope(this.GetType());
+        if (Encoding.UTF8.GetByteCount(message) > MaximumMessageBytes)
+        {
+            // The client limits letters to 1000 bytes. Longer ones are only possible with crafted packets,
+            // and would bloat the database and could overflow the length of the packet which shows the letter.
+            await player.ShowLocalizedBlueMessageAsync(nameof(PlayerMessage.LetterInvalid)).ConfigureAwait(false);
+            await player.InvokeViewPlugInAsync<ILetterSendResultPlugIn>(p => p.LetterSendResultAsync(LetterSendSuccess.TryAgain, letterId)).ConfigureAwait(false);
+            return;
+        }
+
         var sendPrice = player.GameContext.Configuration.LetterSendPrice;
         if (player.Money < sendPrice)
         {

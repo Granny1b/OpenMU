@@ -11,6 +11,13 @@ using MUnique.OpenMU.GameLogic.Views;
 /// </summary>
 public class ChatMessageAction
 {
+    /// <summary>
+    /// The maximum length of a chat message in bytes. Clients send much shorter messages.
+    /// Longer messages are only possible with crafted packets, and could overflow the length of the
+    /// packets which forward the message to other players.
+    /// </summary>
+    private const int MaximumMessageBytes = 200;
+
     private readonly IDictionary<string, ChatMessageType> _messagePrefixes;
     private readonly IDictionary<ChatMessageType, IChatMessageProcessor> _chatProcessMessages;
 
@@ -51,6 +58,12 @@ public class ChatMessageAction
     public async ValueTask ChatMessageAsync(Player sender, string playerName, string message, bool whisper)
     {
         using var loggerScope = sender.Logger.BeginScope(this.GetType());
+        if (Encoding.UTF8.GetByteCount(message) > MaximumMessageBytes)
+        {
+            sender.Logger.LogWarning("Maybe Hacker, chat message of {0} is too long.", sender.SelectedCharacter?.Name);
+            return;
+        }
+
         ChatMessageType messageType = this.GetMessageType(message, whisper);
 
         if (sender.SelectedCharacter is null)

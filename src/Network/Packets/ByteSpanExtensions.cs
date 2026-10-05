@@ -11,6 +11,15 @@ namespace MUnique.OpenMU.Network.Packets;
 public static class ByteSpanExtensions
 {
     /// <summary>
+    /// The UTF-8 encoding which decodes invalid bytes to '?', so that a decoded string is never longer
+    /// than the original bytes when it's encoded again.
+    /// </summary>
+    private static readonly Encoding Utf8WithSingleByteReplacement = Encoding.GetEncoding(
+        Encoding.UTF8.CodePage,
+        EncoderFallback.ReplacementFallback,
+        new DecoderReplacementFallback("?"));
+
+    /// <summary>
     /// Gets the boolean flag of the first byte of the span, considering bit shifting.
     /// </summary>
     /// <param name="span">The span with at least 1 byte.</param>
@@ -109,6 +118,14 @@ public static class ByteSpanExtensions
     /// <remarks>This is not optimal yet, since it creates a new byte array. We might wait until encoding works on spans.</remarks>
     public static string ExtractString(this Span<byte> span, int startIndex, int maximumBytes, Encoding encoding)
     {
+        if (encoding.CodePage == Utf8WithSingleByteReplacement.CodePage)
+        {
+            // Invalid bytes would otherwise be decoded to U+FFFD, which takes 3 bytes when it's encoded again.
+            // That way, a string received from a client could grow when it's sent to other clients, and overflow
+            // the length of the outgoing packet.
+            encoding = Utf8WithSingleByteReplacement;
+        }
+
         var content = span.Slice(startIndex, Math.Min(span.Length - startIndex, maximumBytes)).ToArray();
         int count = 0;
         for (int i = 0; i < content.Length; i++)
