@@ -168,7 +168,8 @@ public class Storage : IStorage
     /// <inheritdoc/>
     public bool TryAddMoney(int value)
     {
-        if (this.ItemStorage.Money + value < 0)
+        var newValue = (long)this.ItemStorage.Money + value;
+        if (newValue < 0 || newValue > int.MaxValue)
         {
             return false;
         }
@@ -180,8 +181,9 @@ public class Storage : IStorage
     /// <inheritdoc/>
     public bool TryRemoveMoney(int value)
     {
-        if (this.ItemStorage.Money - value < 0)
+        if (value < 0 || this.ItemStorage.Money - value < 0)
         {
+            // Removing a negative value would add money.
             return false;
         }
 

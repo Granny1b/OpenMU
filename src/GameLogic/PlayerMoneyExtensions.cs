@@ -1,4 +1,4 @@
-// <copyright file="PlayerMoneyExtensions.cs" company="MUnique">
+﻿// <copyright file="PlayerMoneyExtensions.cs" company="MUnique">
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
@@ -17,6 +17,12 @@ public static class PlayerMoneyExtensions
     /// <returns><c>True</c>, if the player inventory had enough money to remove; Otherwise, <c>false</c>.</returns>
     public static bool TryRemoveMoney(this Player player, int value)
     {
+        if (value < 0)
+        {
+            // Removing a negative value would add money.
+            return false;
+        }
+
         if (player.Money < value)
         {
             return false;
@@ -34,12 +40,12 @@ public static class PlayerMoneyExtensions
     /// <returns><c>True</c>, if the player inventory had space to add money; Otherwise, <c>false</c>.</returns>
     public static bool TryAddMoney(this Player player, int value)
     {
-        if (player.Money + value > player.GameContext?.Configuration?.MaximumInventoryMoney)
+        if ((long)player.Money + value > player.GameContext?.Configuration?.MaximumInventoryMoney)
         {
             return false;
         }
 
-        if (player.Money + value < 0)
+        if ((long)player.Money + value < 0)
         {
             return false;
         }
@@ -56,12 +62,12 @@ public static class PlayerMoneyExtensions
     /// <returns><c>True</c>, if the player inventory had enough money to move; Otherwise, <c>false</c>.</returns>
     public static bool TryDepositVaultMoney(this Player player, int value)
     {
-        if (player.Vault is null)
+        if (player.Vault is null || value <= 0)
         {
             return false;
         }
 
-        if (player.Vault.ItemStorage.Money + value > player.GameContext?.Configuration?.MaximumVaultMoney)
+        if ((long)player.Vault.ItemStorage.Money + value > player.GameContext?.Configuration?.MaximumVaultMoney)
         {
             return false;
         }
@@ -82,12 +88,12 @@ public static class PlayerMoneyExtensions
     /// <returns><c>True</c>, if the vault had enough money to move and player inventory isn't maximum; Otherwise, <c>false</c>.</returns>
     public static bool TryTakeVaultMoney(this Player player, int value)
     {
-        if (player.Vault is null)
+        if (player.Vault is null || value <= 0 || player.IsVaultLocked)
         {
             return false;
         }
 
-        if (player.Money + value > player.GameContext?.Configuration?.MaximumInventoryMoney)
+        if ((long)player.Money + value > player.GameContext?.Configuration?.MaximumInventoryMoney)
         {
             return false;
         }

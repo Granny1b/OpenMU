@@ -29,6 +29,14 @@ internal class VaultMoneyHandlerPlugIn : IPacketHandlerPlugIn
     public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
         VaultMoveMoneyRequest request = packet;
+        if (request.Amount is 0 or > int.MaxValue)
+        {
+            // The amount is unsigned in the packet, but signed in our model. Without this check,
+            // large values turn negative and would reverse the direction of the transfer.
+            await player.InvokeViewPlugInAsync<IUpdateVaultMoneyPlugIn>(p => p.UpdateVaultMoneyAsync(false)).ConfigureAwait(false);
+            return;
+        }
+
         switch (request.Direction)
         {
             case VaultMoveMoneyRequest.VaultMoneyMoveDirection.InventoryToVault:
