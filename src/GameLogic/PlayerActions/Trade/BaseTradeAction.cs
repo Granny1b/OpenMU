@@ -96,6 +96,11 @@ public class BaseTradeAction
     {
         trader.TradingPartner = null;
         trader.BackupInventory = null;
+
+        // The trading money is settled at this point: transferred to the partner when the trade
+        // finished, or given back when it was cancelled. Keeping it would give it back again at the
+        // cancellation of a later trade request which never opened a trade.
+        trader.TradingMoney = 0;
         trader.TemporaryStorage!.Clear();
     }
 

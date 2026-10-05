@@ -110,6 +110,34 @@ public class TradeTest
     }
 
     /// <summary>
+    /// Tests that the trading money is transferred when the trade finishes, and that it's settled afterwards,
+    /// so that a later cancellation can't give it back a second time.
+    /// </summary>
+    [Test]
+    public async ValueTask TradeMoneyIsSettledAfterFinishAsync()
+    {
+        var trader1 = this.CreateTrader(PlayerState.TradeOpened);
+        var trader2 = this.CreateTrader(PlayerState.TradeOpened);
+        trader1.TradingPartner = trader2;
+        trader2.TradingPartner = trader1;
+        trader1.TradingMoney = 1000;
+
+        var gameContext = new Mock<IGameContext>();
+        gameContext.Setup(c => c.PlugInManager).Returns(new PlugInManager(null, new NullLoggerFactory(), null, null));
+        gameContext.Setup(c => c.PersistenceContextProvider).Returns(new InMemoryPersistenceContextProvider());
+        Mock.Get(trader1).Setup(m => m.GameContext).Returns(gameContext.Object);
+        Mock.Get(trader2).Setup(m => m.GameContext).Returns(gameContext.Object);
+
+        var tradeButtonHandler = new TradeButtonAction();
+        await tradeButtonHandler.TradeButtonChangedAsync(trader1, TradeButtonState.Checked).ConfigureAwait(false);
+        await tradeButtonHandler.TradeButtonChangedAsync(trader2, TradeButtonState.Checked).ConfigureAwait(false);
+
+        Assert.That(trader2.Money, Is.EqualTo(1000));
+        Assert.That(trader1.TradingMoney, Is.Zero);
+        Assert.That(trader2.TradingMoney, Is.Zero);
+    }
+
+    /// <summary>
     /// Tests a trade of items.
     /// </summary>
     [Test]
