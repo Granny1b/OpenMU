@@ -41,6 +41,15 @@ public class AreaSkillAttackAction
             return;
         }
 
+        // The center of the target area is sent by the client. Without this check, a client can place
+        // the area anywhere on the map and hit everything around that point. The tolerance matches the
+        // one of targeted skills, see TargetedSkillDefaultPlugin.
+        if (!player.IsInRange(targetAreaCenter, skill.Range + 2))
+        {
+            player.Logger.LogWarning("Probably Hacker - player {Player} requested area skill {Skill} at {Target}, which is out of range.", player, skill.Name, targetAreaCenter);
+            return;
+        }
+
         if (skill.SkillType != SkillType.Buff && skill.SkillType != SkillType.Regeneration)
         {
             if (player.GameContext.PlugInManager.GetPlugInPoint<ISpeedHackCheatCheckPlugIn>() is { } speedCheck)

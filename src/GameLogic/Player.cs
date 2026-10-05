@@ -673,8 +673,13 @@ public class Player : AsyncDisposable, IBucketMapObserver, IAttackable, IAttacke
             return null;
         }
 
-        if (!this.GameContext.PvpEnabled && this.CurrentMap?.Definition.BattleZone == null &&
-            this.CurrentMiniGame?.AllowPlayerKilling is false)
+        // Without a mini game, AllowPlayerKilling is null - which must not count as "killing allowed".
+        // Monsters are never affected by this setting.
+        if (!this.GameContext.PvpEnabled
+            && attacker is Player or IPlayerSurrogate
+            && this.CurrentMap?.Definition.BattleZone == null
+            && this.CurrentMiniGame?.AllowPlayerKilling is not true
+            && this.DuelRoom is null)
         {
             return null;
         }

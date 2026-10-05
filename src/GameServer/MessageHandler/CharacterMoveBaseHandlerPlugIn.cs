@@ -4,6 +4,7 @@
 
 namespace MUnique.OpenMU.GameServer.MessageHandler;
 
+using System.Diagnostics;
 using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.Network.Packets.ClientToServer;
 using MUnique.OpenMU.Pathfinding;
@@ -31,6 +32,12 @@ internal abstract class CharacterMoveBaseHandlerPlugIn : IPacketHandlerPlugIn
         // However, it adds way for cheaters to move through the map.
         // So, we just allow it for developers when the debugger is attached.
         // When handling a skill which moves to the target, we'll handle the move on server-side, instead.
+        // Regular clients send this request after some skills, so it's silently ignored instead of logged.
+        if (!Debugger.IsAttached)
+        {
+            return;
+        }
+
         InstantMoveRequest moveRequest = packet;
         await player.MoveAsync(new Point(moveRequest.TargetX, moveRequest.TargetY)).ConfigureAwait(false);
     }
