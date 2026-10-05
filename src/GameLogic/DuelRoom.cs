@@ -207,10 +207,15 @@ public sealed class DuelRoom : AsyncDisposable
             }
         }
 
-        for (int j = this.Spectators.Count; j >= 0; --j)
+        for (int j = this.Spectators.Count - 1; j >= 0; --j)
         {
             var player = this.Spectators[j];
             await player.InvokeViewPlugInAsync<IDuelSpectatorRemovedPlugIn>(p => p.SpectatorRemovedAsync(spectator)).ConfigureAwait(false);
+        }
+
+        if (spectator.DuelRoom == this)
+        {
+            spectator.DuelRoom = null;
         }
 
         await spectator.InvokeViewPlugInAsync<IDuelEndedPlugIn>(p => p.DuelEndedAsync()).ConfigureAwait(false);
@@ -343,6 +348,9 @@ public sealed class DuelRoom : AsyncDisposable
             this.Spectators.Add(player);
         }
 
+        // The room is assigned to the spectator, so that it's removed from the room (and loses its
+        // invisibility) when it leaves the duel map, see EndDuelWhenLeavingDuelMapPlugIn.
+        player.DuelRoom = this;
         await player.AddInvisibleEffectAsync().ConfigureAwait(false);
         await player.WarpToAsync(spectatorsGate).ConfigureAwait(false);
 
@@ -413,6 +421,12 @@ public sealed class DuelRoom : AsyncDisposable
             await this.MovePlayersToExitAsync().ConfigureAwait(false);
 
             await this.Requester.GameContext.DuelRoomManager.GiveBackDuelRoomAsync(this).ConfigureAwait(false);
+        }
+
+        // Spectators which are still in the room lose their invisibility, which they only got for watching.
+        foreach (var spectator in this.Spectators.ToList())
+        {
+            await spectator.RemoveInvisibleEffectAsync().ConfigureAwait(false);
         }
 
         this.AllPlayers.ForEach(p => p.DuelRoom = null);

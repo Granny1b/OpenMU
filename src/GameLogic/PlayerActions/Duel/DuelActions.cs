@@ -5,6 +5,7 @@
 namespace MUnique.OpenMU.GameLogic.PlayerActions.Duel;
 
 using Microsoft.Extensions.Logging;
+using MUnique.OpenMU.DataModel.Configuration;
 using MUnique.OpenMU.DataModel.Entities;
 using MUnique.OpenMU.GameLogic.GuildWar;
 using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
@@ -159,9 +160,19 @@ public class DuelActions
             return;
         }
 
-        if (player.GameContext.DuelRoomManager.GetRoomByIndex(requestedDuelIndex) is not { } duelRoom)
+        // Spectators get invisible, so joining is only possible through the duel watch dialog of the
+        // doorkeeper, and not while being in another duel room.
+        if (player.DuelRoom is not null
+            || !player.IsAlive
+            || player.OpenedNpc?.Definition.NpcWindow != NpcWindow.DoorkeeperTitusDuelWatch)
         {
-            player.Logger.LogWarning($"Player {player.Name} tried to join duel channel with index {requestedDuelIndex}, but it doesn't exist.");
+            player.Logger.LogWarning($"Player {player.Name} tried to join duel channel with index {requestedDuelIndex} without the duel watch dialog.");
+            return;
+        }
+
+        if (player.GameContext.DuelRoomManager.GetRoomByIndex(requestedDuelIndex) is not { State: DuelState.DuelAccepted or DuelState.DuelStarted } duelRoom)
+        {
+            player.Logger.LogWarning($"Player {player.Name} tried to join duel channel with index {requestedDuelIndex}, but it doesn't exist or has no running duel.");
             return;
         }
 
